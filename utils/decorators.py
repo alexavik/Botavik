@@ -3,7 +3,7 @@
 import logging
 import functools
 from typing import Callable
-from telegram.update import Update
+from telegram import Update
 from telegram.ext import ContextTypes
 from config import BotConfig
 
