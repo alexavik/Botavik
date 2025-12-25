@@ -3,6 +3,7 @@
 
 import logging
 import os
+from pathlib import Path
 from telegram.ext import (
     Application, CommandHandler, ConversationHandler,
     CallbackQueryHandler, MessageHandler, filters
@@ -11,6 +12,9 @@ from config import BotConfig
 from handlers.admin_panel import admin_panel
 from handlers.course_manager import start_course_creation
 from handlers.course_buyer import browse_courses
+
+# Create logs directory if it doesn't exist
+Path('logs').mkdir(parents=True, exist_ok=True)
 
 # Setup logging
 logging.basicConfig(
