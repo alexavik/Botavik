@@ -21,7 +21,7 @@ TITLE, DESCRIPTION, PRICE, CATEGORY, DEMO_VIDEO, CONFIRM = range(6)
 async def start_course_creation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start course creation conversation"""
     await update.message.reply_text(
-        "📝 Let's create a new course!\n\n"
+        "📏 Let's create a new course!\n\n"
         "Step 1/6: Send the course title (5-100 characters)"
     )
     return TITLE
@@ -76,7 +76,7 @@ async def get_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [InlineKeyboardButton("💻 Programming", callback_data="cat_programming")],
-        [InlineKeyboardButton("🔒 Cybersecurity", callback_data="cat_cybersecurity")],
+        [InlineKeyboardButton("🔐 Cybersecurity", callback_data="cat_cybersecurity")],
         [InlineKeyboardButton("🌐 Web Dev", callback_data="cat_web")],
         [InlineKeyboardButton("📱 Mobile Dev", callback_data="cat_mobile")],
         [InlineKeyboardButton("📚 Other", callback_data="cat_other")],
@@ -100,7 +100,7 @@ async def get_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     category_data = {
         'cat_programming': '💻 Programming',
-        'cat_cybersecurity': '🔒 Cybersecurity',
+        'cat_cybersecurity': '🔐 Cybersecurity',
         'cat_web': '🌐 Web Dev',
         'cat_mobile': '📱 Mobile Dev',
         'cat_other': '📚 Other',
@@ -111,7 +111,7 @@ async def get_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['course_category'] = category
     
     await query.edit_message_text(
-        f"{'✅ Category saved!' if category else '⏭️ Skipped category'}\n\n"
+        f"{"✅ Category saved!" if category else "⏭️ Skipped category"}\n\n"
         "Step 5/6: Send the demo video (optional)\n\n"
         "Forward a video or send /skip"
     )
@@ -145,11 +145,11 @@ async def confirm_course(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = f"""
 📋 COURSE DETAILS REVIEW:
 
-📝 Title: {data.get('course_title')}
+📏 Title: {data.get('course_title')}
 📚 Description: {data.get('course_description')[:100]}...
 💰 Price: ₹{data.get('course_price')}
-🏷️ Category: {data.get('course_category') or 'Not set'}
-🎬 Demo Video: {'✅ Yes' if data.get('course_demo_video') else '❌ No'}
+🏗️ Category: {data.get('course_category') or 'Not set'}
+🎥 Demo Video: {'✅ Yes' if data.get('course_demo_video') else '❌ No'}
 
 Does everything look correct?
 """
