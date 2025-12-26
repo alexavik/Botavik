@@ -1,5 +1,5 @@
 # Main entry point for the Telegram Course Sales Bot
-# This is the core file that ties everything together
+# Professional Premium Admin Dashboard Integration
 
 import logging
 import os
@@ -9,6 +9,30 @@ from telegram.ext import (
     CallbackQueryHandler, MessageHandler, filters
 )
 from config import BotConfig
+
+# Import admin dashboard
+from handlers.admin_dashboard import (
+    AdminDashboard,
+    broadcast_menu,
+    broadcast_create,
+    broadcast_received,
+    broadcast_send,
+    users_menu,
+    credits_menu,
+    force_join_menu,
+    manage_admins_menu,
+    content_editor_menu,
+    ai_assistant_menu,
+    BROADCAST_MESSAGE
+)
+
+# Import force join checker
+from handlers.force_join_checker import (
+    verify_force_join,
+    force_join_middleware
+)
+
+# Import existing handlers
 from handlers.admin_panel import (
     admin_panel,
     admin_create_course_callback,
@@ -105,6 +129,22 @@ Need more help? /support
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
+# Build conversation handler for broadcast
+broadcast_conv_handler = ConversationHandler(
+    entry_points=[
+        CallbackQueryHandler(broadcast_create, pattern='^broadcast_create$')
+    ],
+    states={
+        BROADCAST_MESSAGE: [
+            MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.DOCUMENT, broadcast_received)
+        ]
+    },
+    fallbacks=[
+        CallbackQueryHandler(lambda u, c: ConversationHandler.END, pattern='^broadcast_cancel$')
+    ],
+    name='broadcast_creation'
+)
+
 # Build conversation handler for course creation
 course_conv_handler = ConversationHandler(
     entry_points=[
@@ -135,10 +175,20 @@ course_conv_handler = ConversationHandler(
     name='course_creation'
 )
 
+async def protected_start(update, context):
+    """Start command with force join check"""
+    # Check force join
+    if not await force_join_middleware(update, context):
+        return
+    
+    # Proceed with normal start
+    await start(update, context)
+
 async def post_init(application: Application) -> None:
     """Initialize database connection after bot starts"""
     await db.connect()
     logger.info("✅ Database connection initialized")
+    logger.info("🚀 Premium Admin Dashboard Ready")
 
 async def post_shutdown(application: Application) -> None:
     """Close database connection on shutdown"""
@@ -155,9 +205,37 @@ def main():
     application.post_shutdown = post_shutdown
     
     # === CORE COMMANDS ===
-    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('start', protected_start))
     application.add_handler(CommandHandler('help', help_command))
-    application.add_handler(CommandHandler('admin', admin_panel))
+    application.add_handler(CommandHandler('admin', AdminDashboard.main_dashboard))
+    
+    # === PREMIUM ADMIN DASHBOARD ===
+    # Main dashboard
+    application.add_handler(CallbackQueryHandler(AdminDashboard.main_dashboard, pattern='^admin_dashboard$'))
+    
+    # Broadcast system
+    application.add_handler(CallbackQueryHandler(broadcast_menu, pattern='^admin_broadcast$'))
+    application.add_handler(broadcast_conv_handler)
+    application.add_handler(CallbackQueryHandler(broadcast_send, pattern='^broadcast_send$'))
+    
+    # User management
+    application.add_handler(CallbackQueryHandler(users_menu, pattern='^admin_users$'))
+    
+    # Credits management
+    application.add_handler(CallbackQueryHandler(credits_menu, pattern='^admin_credits$'))
+    
+    # Force join management
+    application.add_handler(CallbackQueryHandler(force_join_menu, pattern='^admin_force_join$'))
+    application.add_handler(CallbackQueryHandler(verify_force_join, pattern='^verify_force_join$'))
+    
+    # Admin management
+    application.add_handler(CallbackQueryHandler(manage_admins_menu, pattern='^admin_manage_admins$'))
+    
+    # Content editor
+    application.add_handler(CallbackQueryHandler(content_editor_menu, pattern='^admin_content$'))
+    
+    # AI assistant
+    application.add_handler(CallbackQueryHandler(ai_assistant_menu, pattern='^admin_ai$'))
     
     # === INLINE KEYBOARD HANDLERS (Main Menu) ===
     application.add_handler(CallbackQueryHandler(menu_courses, pattern='^menu_courses$'))
@@ -177,7 +255,8 @@ def main():
     application.add_handler(MessageHandler(filters.Regex('^🎁 Donate$'), handle_donate))
     application.add_handler(MessageHandler(filters.Regex('^💸 Resell$'), handle_resell))
     
-    # === ADMIN PANEL CALLBACKS ===
+    # === OLD ADMIN PANEL CALLBACKS (Legacy Support) ===
+    application.add_handler(CallbackQueryHandler(admin_panel, pattern='^admin_panel$'))
     application.add_handler(CallbackQueryHandler(admin_create_course_callback, pattern='^admin_create_course$'))
     application.add_handler(CallbackQueryHandler(admin_manage_courses_callback, pattern='^admin_manage_courses$'))
     application.add_handler(CallbackQueryHandler(admin_analytics_callback, pattern='^admin_analytics$'))
@@ -195,7 +274,11 @@ def main():
     application.add_handler(CallbackQueryHandler(browse_courses, pattern=r'^buy_\d+$'))
     
     # Start bot
-    logger.info("🤖 Bot starting...")
+    logger.info("🤖 Bot starting with Premium Admin Dashboard...")
+    logger.info("✅ Force Join Middleware Active")
+    logger.info("✅ Broadcast System Ready")
+    logger.info("✅ Credit Management Ready")
+    logger.info("✅ AI Assistant Ready")
     application.run_polling(allowed_updates=['message', 'callback_query'])
 
 if __name__ == '__main__':
