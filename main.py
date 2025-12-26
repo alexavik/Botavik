@@ -18,6 +18,25 @@ from handlers.admin_panel import (
     admin_orders_callback,
     cancel_admin
 )
+from handlers.start import (
+    start,
+    menu_courses,
+    menu_proof,
+    menu_setting,
+    menu_latest,
+    menu_status,
+    menu_request,
+    menu_owner,
+    owner_channel,
+    owner_all_courses,
+    owner_discussion,
+    owner_website,
+    owner_donate,
+    owner_resell,
+    owner_refer,
+    menu_back,
+    handle_callback
+)
 from handlers.course_manager import start_course_creation
 from handlers.course_buyer import browse_courses
 from database.db import db
@@ -43,45 +62,6 @@ COURSE_CATEGORY = 3
 COURSE_PRICE = 4
 COURSE_DEMO_VIDEO = 5
 CONFIRM_POST = 6
-
-async def start(update, context):
-    """Handle /start command and deep links"""
-    user = update.effective_user
-    args = context.args
-    
-    if args and len(args) > 0:
-        param = args[0]  # e.g., "buy_123" or "wish_456"
-        
-        if param.startswith("buy_"):
-            course_id = int(param.split("_")[1])
-            await browse_courses(update, context)
-            return
-        
-        elif param.startswith("wish_"):
-            course_id = int(param.split("_")[1])
-            await browse_courses(update, context)
-            return
-    
-    # Normal /start without params
-    welcome = f"""
-👋 Welcome to Course Sales Bot! 👋
-═══════════════════════════════════════════════════════════════
-
-Hi {user.first_name}! 🙂
-
-🎓 Learn amazing courses
-💰 100% secure payments
-❤️ Save favorites to wishlist
-
-📚 Browse courses: [Open Channel]
-📧 Need help? /support
-👑 Admin? /admin
-
-What would you like to do?
-    """
-    
-    await update.message.reply_text(welcome, parse_mode='Markdown')
-    logger.info(f"✅ User {user.id} started bot")
 
 async def help_command(update, context):
     """Show help menu"""
@@ -175,12 +155,31 @@ def main():
     application.post_init = post_init
     application.post_shutdown = post_shutdown
     
-    # Core commands
+    # === CORE COMMANDS ===
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(CommandHandler('admin', admin_panel))
     
-    # Admin panel callback handlers
+    # === MAIN MENU CALLBACKS ===
+    application.add_handler(CallbackQueryHandler(menu_courses, pattern='^menu_courses$'))
+    application.add_handler(CallbackQueryHandler(menu_proof, pattern='^menu_proof$'))
+    application.add_handler(CallbackQueryHandler(menu_setting, pattern='^menu_setting$'))
+    application.add_handler(CallbackQueryHandler(menu_latest, pattern='^menu_latest$'))
+    application.add_handler(CallbackQueryHandler(menu_status, pattern='^menu_status$'))
+    application.add_handler(CallbackQueryHandler(menu_request, pattern='^menu_request$'))
+    application.add_handler(CallbackQueryHandler(menu_owner, pattern='^menu_owner$'))
+    application.add_handler(CallbackQueryHandler(menu_back, pattern='^menu_back$'))
+    
+    # === OWNER SECTION CALLBACKS ===
+    application.add_handler(CallbackQueryHandler(owner_channel, pattern='^owner_channel$'))
+    application.add_handler(CallbackQueryHandler(owner_all_courses, pattern='^owner_all_courses$'))
+    application.add_handler(CallbackQueryHandler(owner_discussion, pattern='^owner_discussion$'))
+    application.add_handler(CallbackQueryHandler(owner_website, pattern='^owner_website$'))
+    application.add_handler(CallbackQueryHandler(owner_donate, pattern='^owner_donate$'))
+    application.add_handler(CallbackQueryHandler(owner_resell, pattern='^owner_resell$'))
+    application.add_handler(CallbackQueryHandler(owner_refer, pattern='^owner_refer$'))
+    
+    # === ADMIN PANEL CALLBACKS ===
     application.add_handler(CallbackQueryHandler(admin_create_course_callback, pattern='^admin_create_course$'))
     application.add_handler(CallbackQueryHandler(admin_manage_courses_callback, pattern='^admin_manage_courses$'))
     application.add_handler(CallbackQueryHandler(admin_analytics_callback, pattern='^admin_analytics$'))
@@ -188,10 +187,13 @@ def main():
     application.add_handler(CallbackQueryHandler(admin_orders_callback, pattern='^admin_orders$'))
     application.add_handler(CallbackQueryHandler(cancel_admin, pattern='^cancel$'))
     
-    # Course creation conversation
+    # === GENERIC CALLBACKS (for remaining actions) ===
+    application.add_handler(CallbackQueryHandler(handle_callback, pattern='^(send_request|donate_now|resell_apply|refer_dashboard)$'))
+    
+    # === COURSE CREATION CONVERSATION ===
     application.add_handler(course_conv_handler)
     
-    # Buyer handlers
+    # === BUYER HANDLERS ===
     application.add_handler(CallbackQueryHandler(browse_courses, pattern=r'^buy_\d+$'))
     
     # Start bot
