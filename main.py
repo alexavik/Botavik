@@ -12,6 +12,7 @@ from config import BotConfig
 from handlers.admin_panel import admin_panel
 from handlers.course_manager import start_course_creation
 from handlers.course_buyer import browse_courses
+from database.db import db
 
 # Create logs directory if it doesn't exist
 Path('logs').mkdir(parents=True, exist_ok=True)
@@ -153,10 +154,24 @@ course_conv_handler = ConversationHandler(
     name='course_creation'
 )
 
+async def post_init(application: Application) -> None:
+    """Initialize database connection after bot starts"""
+    await db.connect()
+    logger.info("✅ Database connection initialized")
+
+async def post_shutdown(application: Application) -> None:
+    """Close database connection on shutdown"""
+    await db.disconnect()
+    logger.info("✅ Database connection closed")
+
 def main():
     """Start the bot"""
     # Create application
     application = Application.builder().token(BotConfig.TELEGRAM_BOT_TOKEN).build()
+    
+    # Setup database lifecycle hooks
+    application.post_init = post_init
+    application.post_shutdown = post_shutdown
     
     # Core commands
     application.add_handler(CommandHandler('start', start))
