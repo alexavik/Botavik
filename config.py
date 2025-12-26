@@ -1,98 +1,128 @@
-# Configuration file for Telegram Course Sales Bot
-# All settings in one place
+# 🛠️ Configuration Management - Telegram Course Sales Bot
 
 import os
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
+
 class BotConfig:
-    """Bot configuration"""
-    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-    ADMIN_USER_IDS = [int(x.strip()) for x in os.getenv("ADMIN_USER_IDS", "").split(",") if x.strip()]
-    PUBLISHING_CHANNEL_ID = int(os.getenv("PUBLISHING_CHANNEL_ID", "-1001234567890"))
-    BOT_USERNAME = os.getenv("BOT_USERNAME", "your_bot")
-    OWNER_CREDIT = os.getenv("OWNER_CREDIT", "@unknownwarrior911")
-    ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+    """Telegram Bot Configuration"""
+    TELEGRAM_BOT_TOKEN = os.getenv(
+        'TELEGRAM_BOT_TOKEN',
+        'YOUR_TOKEN_HERE'
+    )
+    ALLOWED_USER_IDS = os.getenv('ALLOWED_USER_IDS', '')
+    OWNER_ID = int(os.getenv('OWNER_ID', 0)) if os.getenv('OWNER_ID') else None
+    SUPPORT_CHAT_ID = os.getenv('SUPPORT_CHAT_ID', '')
 
-class AIConfig:
-    """AI API configuration (OpenRouter + Gemini)"""
-    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-    OPENROUTER_MODEL = "google/gemini-2.0-flash-exp:free"
-    OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-    TEMPERATURE = 0.7
-    MAX_TOKENS = 1024
-    TIMEOUT = 30
-
-class PaymentConfig:
-    """Payment configuration (FamPay UPI)"""
-    PAYMENT_METHOD = os.getenv("PAYMENT_METHOD", "fampay")
-    FAMPAY_UPI_ID = os.getenv("FAMPAY_UPI_ID")
-    CURRENCY = "₹"
-    MIN_AMOUNT = 100.0
-    MAX_AMOUNT = 100000.0
 
 class DatabaseConfig:
-    """Database configuration (PostgreSQL)"""
-    DATABASE_URL = os.getenv("DATABASE_URL")
-    # Connection pool settings
-    MIN_CONNECTIONS = 5
-    MAX_CONNECTIONS = 20
-    COMMAND_TIMEOUT = 30
+    """PostgreSQL Database Configuration"""
+    DATABASE_URL = os.getenv(
+        'DATABASE_URL',
+        'postgresql://user:password@localhost/botavik'
+    )
 
-class CourseConfig:
-    """Course settings"""
-    MAX_TITLE_LENGTH = 255
-    MAX_DESCRIPTION_LENGTH = 2000
-    MAX_PRICE = PaymentConfig.MAX_AMOUNT
-    MIN_PRICE = 100.0
-    MAX_VIDEO_SIZE = 20 * 1024 * 1024  # 20MB
+
+class PaymentConfig:
+    """Payment Gateway Configuration"""
+    UPI_ID = os.getenv('UPI_ID', '')
+    RAZORPAY_KEY = os.getenv('RAZORPAY_KEY', '')
+    RAZORPAY_SECRET = os.getenv('RAZORPAY_SECRET', '')
+    PAYMENT_WEBHOOK_SECRET = os.getenv('PAYMENT_WEBHOOK_SECRET', '')
+
+
+class AIConfig:
+    """OpenRouter AI Configuration"""
     
-    # Categories with emojis
-    CATEGORIES = {
-        'hacking': '🔐 Ethical Hacking',
-        'python': '🐍 Python Programming',
-        'web': '🌐 Web Development',
-        'android': '📱 Android Development',
-        'cybersecurity': '🛡️ Cybersecurity',
-        'other': '📚 Other'
+    # OpenRouter API Key
+    OPENROUTER_API_KEY = os.getenv(
+        'OPENROUTER_API_KEY',
+        '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'
+    )
+    
+    # AI Model Selection
+    AI_MODEL = os.getenv(
+        'AI_MODEL',
+        'google/gemini-2.0-flash-exp'
+    )
+    
+    # AI Features Toggle
+    AI_ENABLED = os.getenv('AI_ENABLED', 'True').lower() == 'true'
+    
+    # API Configuration
+    OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1'
+    API_TIMEOUT = 30
+    MAX_RETRIES = 3
+    
+    # Temperature and top_p for generation
+    TEMPERATURE = 0.7
+    TOP_P = 0.9
+    MAX_TOKENS = 1500
+    
+    # Prompts for different AI tasks
+    PROMPTS = {
+        'course_description': """You are a professional course creator. Generate an engaging, 
+detailed course description for '{course_name}' that covers topics: {topics}. 
+Make it compelling and highlight key benefits. Keep it under 200 words.""",
+        
+        'promotional_message': """Create an engaging promotional message for '{course_name}' 
+with price ₹{price}. Make it catchy, use emojis, and include a call-to-action. 
+Keep it concise but persuasive.""",
+        
+        'broadcast_message': """Write a professional broadcast message for users about: {content}. 
+Make it engaging with proper formatting and emojis. Keep it concise.""",
+        
+        'faq_generator': """Generate 5-7 FAQs for the course '{course_name}' with topics: {topics}. 
+Format as Q&A pairs. Make answers concise and helpful.""",
+        
+        'email_template': """Create a professional email template for {purpose}. 
+Include: subject line, greeting, body, and closing. Make it suitable for course sales."""
     }
+    
+    @staticmethod
+    def is_configured() -> bool:
+        """Check if AI is properly configured"""
+        return AIConfig.AI_ENABLED and bool(AIConfig.OPENROUTER_API_KEY)
 
-class ValidationRules:
-    """Input validation rules"""
-    TITLE_MIN = 5
-    TITLE_MAX = 100
-    DESC_MIN = 20
-    DESC_MAX = 1000
-    PRICE_MIN = 100
-    PRICE_MAX = 100000
 
-# Verify critical settings
-def validate_config():
-    """Validate that all critical settings are set"""
-    errors = []
-    
-    if not BotConfig.TELEGRAM_BOT_TOKEN:
-        errors.append("❌ TELEGRAM_BOT_TOKEN not set in .env")
-    
-    if not AIConfig.OPENROUTER_API_KEY:
-        errors.append("❌ OPENROUTER_API_KEY not set in .env")
-    
-    if not PaymentConfig.FAMPAY_UPI_ID:
-        errors.append("⚠️ FAMPAY_UPI_ID not set (payments disabled)")
-    
-    if not DatabaseConfig.DATABASE_URL:
-        errors.append("❌ DATABASE_URL not set in .env")
-    
-    if not BotConfig.ADMIN_USER_IDS:
-        errors.append("⚠️ ADMIN_USER_IDS not set (no admin access)")
-    
-    return errors
+class ChannelConfig:
+    """Channel and Group Configuration"""
+    COURSE_CHANNEL_ID = os.getenv('COURSE_CHANNEL_ID', '')
+    ANNOUNCEMENT_CHANNEL_ID = os.getenv('ANNOUNCEMENT_CHANNEL_ID', '')
+    SUPPORT_GROUP_ID = os.getenv('SUPPORT_GROUP_ID', '')
+    DISCUSSION_GROUP_ID = os.getenv('DISCUSSION_GROUP_ID', '')
 
-# On import, check config
-config_errors = validate_config()
-if config_errors:
-    print("\n⚠️ CONFIG VALIDATION WARNINGS:")
-    for error in config_errors:
-        print(f"  {error}")
-    print()
+
+class AppConfig:
+    """Application Configuration"""
+    # Environment
+    DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+    ENVIRONMENT = os.getenv('ENVIRONMENT', 'production')
+    
+    # Logging
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    LOG_FILE = os.getenv('LOG_FILE', 'logs/bot.log')
+    
+    # Rate limiting
+    BROADCAST_DELAY = float(os.getenv('BROADCAST_DELAY', 0.1))  # seconds between broadcasts
+    MAX_BROADCAST_SIZE = int(os.getenv('MAX_BROADCAST_SIZE', 100))  # batch size
+    
+    # Features
+    ENABLE_COURSES = os.getenv('ENABLE_COURSES', 'True').lower() == 'true'
+    ENABLE_PAYMENTS = os.getenv('ENABLE_PAYMENTS', 'True').lower() == 'true'
+    ENABLE_FORCE_JOIN = os.getenv('ENABLE_FORCE_JOIN', 'True').lower() == 'true'
+    ENABLE_ADMIN_DASHBOARD = os.getenv('ENABLE_ADMIN_DASHBOARD', 'True').lower() == 'true'
+    ENABLE_AI_FEATURES = os.getenv('ENABLE_AI_FEATURES', AIConfig.AI_ENABLED).lower() == 'true'
+
+
+class ValidationConfig:
+    """Validation Configuration"""
+    MIN_COURSE_TITLE_LENGTH = 5
+    MAX_COURSE_TITLE_LENGTH = 150
+    MIN_COURSE_DESCRIPTION_LENGTH = 20
+    MAX_COURSE_DESCRIPTION_LENGTH = 2000
+    MIN_PRICE = 0.01
+    MAX_PRICE = 1000000
