@@ -1,6 +1,7 @@
 # 🤖 OpenRouter AI Service - Gemini 2.0 Flash Integration
 
 import aiohttp
+import asyncio
 import logging
 import json
 from typing import Optional, Dict
