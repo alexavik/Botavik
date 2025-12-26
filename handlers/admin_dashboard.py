@@ -1,154 +1,141 @@
-# Professional Premium Admin Dashboard
-# Complete admin control panel with advanced features
+# Premium Admin Dashboard for Course Pro Bot
+# Professional admin control panel with AI assistance
 
+import logging
+import asyncio
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from telegram.constants import ParseMode
 from database.db import db
-import logging
-from datetime import datetime
-from config import BotConfig
 
 logger = logging.getLogger(__name__)
 
 # Conversation states
-BROADCAST_MESSAGE = 1
-ADD_ADMIN = 2
-ADD_FORCE_JOIN = 3
-EDIT_WELCOME = 4
-MANAGE_CREDITS = 5
-AI_PROMPT = 6
+(BROADCAST_MESSAGE, ADD_ADMIN, REMOVE_ADMIN, ADD_CHANNEL, REMOVE_CHANNEL,
+ SET_CREDITS, ADD_CREDITS, REMOVE_CREDITS, AI_PROMPT, EDIT_CONTENT,
+ SCHEDULE_BROADCAST) = range(11)
 
-class AdminDashboard:
-    """Premium Admin Dashboard Controller"""
-    
-    @staticmethod
-    async def check_admin(user_id: int) -> bool:
-        """Check if user is admin"""
-        try:
-            admin = await db.get_admin(user_id)
-            return admin is not None
-        except Exception as e:
-            logger.error(f"Error checking admin: {e}")
-            return False
-    
-    @staticmethod
-    async def main_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Show main admin dashboard"""
-        query = update.callback_query
-        user_id = query.from_user.id if query else update.effective_user.id
-        
-        # Check admin access
-        if not await AdminDashboard.check_admin(user_id):
-            text = "⛔ **ACCESS DENIED**\n\nYou don't have admin privileges."
-            if query:
-                await query.answer("Access Denied!", show_alert=True)
-                await query.edit_message_text(text, parse_mode='Markdown')
-            else:
-                await update.message.reply_text(text, parse_mode='Markdown')
-            return
-        
-        # Get stats
-        stats = await db.get_bot_stats()
-        
-        text = f"""
-👑 **ADMIN DASHBOARD**
-═════════════════════════════════════════════════════
+# ==================== MAIN ADMIN DASHBOARD ====================
 
-📊 **Bot Statistics:**
-   • Total Users: {stats.get('total_users', 0)}
-   • Active Today: {stats.get('active_today', 0)}
-   • New Users (7d): {stats.get('new_users_week', 0)}
-   • Total Courses: {stats.get('total_courses', 0)}
-   • Total Revenue: ₹{stats.get('total_revenue', 0)}
-   • Pending Orders: {stats.get('pending_orders', 0)}
-
-🕒 **Last Updated:** {datetime.now().strftime('%d/%m/%Y %H:%M')}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Select an option below to manage:
-        """
-        
-        keyboard = [
-            [
-                InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast"),
-                InlineKeyboardButton("👥 Users", callback_data="admin_users")
-            ],
-            [
-                InlineKeyboardButton("📚 Courses", callback_data="admin_courses"),
-                InlineKeyboardButton("💰 Credits", callback_data="admin_credits")
-            ],
-            [
-                InlineKeyboardButton("🔒 Force Join", callback_data="admin_force_join"),
-                InlineKeyboardButton("👑 Admins", callback_data="admin_manage_admins")
-            ],
-            [
-                InlineKeyboardButton("✏️ Content Editor", callback_data="admin_content"),
-                InlineKeyboardButton("🤖 AI Assistant", callback_data="admin_ai")
-            ],
-            [
-                InlineKeyboardButton("📊 Analytics", callback_data="admin_analytics"),
-                InlineKeyboardButton("⚙️ Settings", callback_data="admin_settings")
-            ],
-            [
-                InlineKeyboardButton("📦 Orders", callback_data="admin_orders"),
-                InlineKeyboardButton("🎨 Customize", callback_data="admin_customize")
-            ],
-            [
-                InlineKeyboardButton("🔄 Refresh Stats", callback_data="admin_dashboard")
-            ]
-        ]
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        if query:
-            await query.answer()
-            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-        else:
-            await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# ==================== BROADCAST SYSTEM ====================
-
-async def broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show broadcast menu"""
+async def admin_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show premium admin dashboard"""
     query = update.callback_query
-    await query.answer()
+    user = update.effective_user if query else update.message.from_user
     
-    text = """
-📢 **BROADCAST SYSTEM**
-═════════════════════════════════════════════════════
+    # Check if user is admin
+    is_admin = await db.is_admin(user.id)
+    
+    if not is_admin:
+        text = "❌ **Access Denied**\n\nYou are not authorized to access the admin panel."
+        if query:
+            await query.answer("Access Denied!", show_alert=True)
+            await query.edit_message_text(text, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(text, parse_mode='Markdown')
+        return
+    
+    # Get stats
+    stats = await db.get_admin_stats()
+    
+    text = f"""
+👑 **PREMIUM ADMIN DASHBOARD**
+═══════════════════════════════════════════════════════════════
 
-Send messages to all bot users instantly!
+📊 **Quick Stats:**
+• Total Users: **{stats.get('total_users', 0):,}**
+• Active Today: **{stats.get('active_today', 0):,}**
+• Total Courses: **{stats.get('total_courses', 0)}**
+• Revenue (Month): **₹{stats.get('monthly_revenue', 0):,}**
+• Pending Orders: **{stats.get('pending_orders', 0)}**
 
-**Features:**
-   ✅ Rich text formatting (Bold, Italic, Code)
-   ✅ Media support (Photos, Videos, Files)
-   ✅ Button attachments
-   ✅ Preview before sending
-   ✅ Send to specific groups
-   ✅ Schedule broadcasts
+🔒 **Access Level:** Super Admin
+📅 **Last Login:** {datetime.now().strftime('%d %b %Y, %I:%M %p')}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Target Options:**
-   • All Users
-   • Active Users (7 days)
-   • Premium Users Only
-   • Free Users Only
-   • Custom List
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 Select an option to manage:
     """
     
     keyboard = [
         [
-            InlineKeyboardButton("📝 Create Broadcast", callback_data="broadcast_create"),
-            InlineKeyboardButton("📜 History", callback_data="broadcast_history")
+            InlineKeyboardButton("🤖 AI Assistant", callback_data="admin_ai"),
+            InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast")
         ],
         [
-            InlineKeyboardButton("📊 Statistics", callback_data="broadcast_stats"),
-            InlineKeyboardButton("⏰ Scheduled", callback_data="broadcast_scheduled")
+            InlineKeyboardButton("🚪 Force Join", callback_data="admin_force_join"),
+            InlineKeyboardButton("👥 Manage Users", callback_data="admin_users")
+        ],
+        [
+            InlineKeyboardButton("💳 Credits System", callback_data="admin_credits"),
+            InlineKeyboardButton("👨‍💼 Manage Admins", callback_data="admin_manage_admins")
+        ],
+        [
+            InlineKeyboardButton("⚙️ Content Editor", callback_data="admin_content"),
+            InlineKeyboardButton("📊 Analytics", callback_data="admin_analytics_dashboard")
+        ],
+        [
+            InlineKeyboardButton("📚 Courses", callback_data="admin_courses_panel"),
+            InlineKeyboardButton("📝 Orders", callback_data="admin_orders_panel")
+        ],
+        [
+            InlineKeyboardButton("🎨 Customize Bot", callback_data="admin_customize"),
+            InlineKeyboardButton("🛠️ Settings", callback_data="admin_settings_panel")
+        ],
+        [
+            InlineKeyboardButton("📄 Export Data", callback_data="admin_export"),
+            InlineKeyboardButton("📊 Logs", callback_data="admin_logs")
+        ],
+        [
+            InlineKeyboardButton("🔙 Close", callback_data="admin_close")
+        ]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if query:
+        await query.answer()
+        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    else:
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+
+# ==================== AI ASSISTANT ====================
+
+async def admin_ai_assistant(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """AI-powered admin assistant"""
+    query = update.callback_query
+    await query.answer()
+    
+    text = """
+🤖 **AI ADMIN ASSISTANT**
+═══════════════════════════════════════════════════════════════
+
+💡 **What can I help you with?**
+
+• Generate course descriptions
+• Create promotional messages
+• Write email templates
+• Generate social media posts
+• Create FAQ answers
+• Draft announcement messages
+• Write course outlines
+• Generate pricing suggestions
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 Type your request or choose a template:
+    """
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("📚 Generate Course Description", callback_data="ai_course_desc"),
+        ],
+        [
+            InlineKeyboardButton("📣 Promotional Message", callback_data="ai_promo"),
+            InlineKeyboardButton("📧 Email Template", callback_data="ai_email")
+        ],
+        [
+            InlineKeyboardButton("📱 Social Media Post", callback_data="ai_social"),
+            InlineKeyboardButton("❓ FAQ Answer", callback_data="ai_faq")
         ],
         [
             InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_dashboard")
@@ -157,305 +144,263 @@ Send messages to all bot users instantly!
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    
+    return AI_PROMPT
 
-async def broadcast_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Start broadcast creation"""
+# ==================== BROADCAST SYSTEM ====================
+
+async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Broadcast message to all users"""
+    query = update.callback_query
+    await query.answer()
+    
+    stats = await db.get_broadcast_stats()
+    
+    text = f"""
+📢 **BROADCAST SYSTEM**
+═══════════════════════════════════════════════════════════════
+
+📊 **Broadcast Stats:**
+• Total Users: **{stats.get('total_users', 0):,}**
+• Active Users: **{stats.get('active_users', 0):,}**
+• Last Broadcast: **{stats.get('last_broadcast', 'Never')}**
+• Success Rate: **{stats.get('success_rate', 0)}%**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 **Choose broadcast type:**
+    """
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("📤 Send Now", callback_data="broadcast_now"),
+            InlineKeyboardButton("⏰ Schedule", callback_data="broadcast_schedule")
+        ],
+        [
+            InlineKeyboardButton("🎯 Target Active Users", callback_data="broadcast_active"),
+            InlineKeyboardButton("📅 Target Inactive", callback_data="broadcast_inactive")
+        ],
+        [
+            InlineKeyboardButton("📊 View History", callback_data="broadcast_history"),
+            InlineKeyboardButton("🤖 AI Generate", callback_data="broadcast_ai")
+        ],
+        [
+            InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_dashboard")
+        ]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    
+    return ConversationHandler.END
+
+async def broadcast_now(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Send broadcast message now"""
     query = update.callback_query
     await query.answer()
     
     text = """
-📝 **CREATE BROADCAST**
-═════════════════════════════════════════════════════
+📝 **COMPOSE BROADCAST MESSAGE**
+═══════════════════════════════════════════════════════════════
 
-Please send your broadcast message now.
+✏️ Type your broadcast message below:
 
-**Formatting Tips:**
-   • `*bold*` for **bold text**
-   • `_italic_` for _italic text_
-   • `` `code` `` for `monospace`
-   • `[link text](URL)` for hyperlinks
+• You can use Markdown formatting
+• Add emojis for better engagement
+• Keep it clear and concise
+• Include a call-to-action
 
-**You can also send:**
-   • Photos with captions
-   • Videos with captions
-   • Documents
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Type your message or /cancel to abort:
+❗ Type /cancel to abort
     """
     
     await query.edit_message_text(text, parse_mode='Markdown')
     return BROADCAST_MESSAGE
 
-async def broadcast_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Receive broadcast message and show preview"""
-    message = update.message
+async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Process and send broadcast"""
+    message_text = update.message.text
     
-    # Store message details in context
-    context.user_data['broadcast_message'] = message.text or message.caption
-    context.user_data['broadcast_media'] = None
-    
-    if message.photo:
-        context.user_data['broadcast_media'] = ('photo', message.photo[-1].file_id)
-    elif message.video:
-        context.user_data['broadcast_media'] = ('video', message.video.file_id)
-    elif message.document:
-        context.user_data['broadcast_media'] = ('document', message.document.file_id)
-    
-    # Show preview
+    # Confirm broadcast
     text = f"""
-👁️ **BROADCAST PREVIEW**
-═════════════════════════════════════════════════════
+✅ **CONFIRM BROADCAST**
+═══════════════════════════════════════════════════════════════
 
-**Your Message:**
-{context.user_data['broadcast_message']}
+📝 **Preview:**
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{message_text}
 
-**Target Audience:** All Users
-**Estimated Reach:** {await db.get_total_users()} users
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Confirm to send broadcast?
+⚠️ This will be sent to all users. Continue?
     """
     
     keyboard = [
         [
-            InlineKeyboardButton("✅ Send Now", callback_data="broadcast_send"),
-            InlineKeyboardButton("🎯 Choose Target", callback_data="broadcast_target")
-        ],
-        [
-            InlineKeyboardButton("⏰ Schedule", callback_data="broadcast_schedule"),
-            InlineKeyboardButton("❌ Cancel", callback_data="broadcast_cancel")
+            InlineKeyboardButton("✅ Yes, Send Now", callback_data=f"broadcast_confirm_{message_text[:50]}"),
+            InlineKeyboardButton("❌ Cancel", callback_data="admin_broadcast")
         ]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    
+    # Store message in context
+    context.user_data['broadcast_message'] = message_text
     
     return ConversationHandler.END
 
-async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send broadcast to all users"""
+async def broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Execute broadcast to all users"""
     query = update.callback_query
-    await query.answer("Starting broadcast...")
+    await query.answer("📤 Sending broadcast...")
     
-    message_text = context.user_data.get('broadcast_message')
-    media = context.user_data.get('broadcast_media')
+    message_text = context.user_data.get('broadcast_message', '')
     
     # Get all users
     users = await db.get_all_users()
     
     success_count = 0
     failed_count = 0
+    blocked_count = 0
     
-    await query.edit_message_text(
-        f"📤 **Broadcasting...**\n\nSending to {len(users)} users...",
+    progress_msg = await query.edit_message_text(
+        f"📤 **Broadcasting...**\n\nProgress: 0/{len(users)}",
         parse_mode='Markdown'
     )
     
-    for user in users:
+    for index, user in enumerate(users, 1):
         try:
-            if media:
-                media_type, file_id = media
-                if media_type == 'photo':
-                    await context.bot.send_photo(
-                        chat_id=user['user_id'],
-                        photo=file_id,
-                        caption=message_text,
-                        parse_mode='Markdown'
-                    )
-                elif media_type == 'video':
-                    await context.bot.send_video(
-                        chat_id=user['user_id'],
-                        video=file_id,
-                        caption=message_text,
-                        parse_mode='Markdown'
-                    )
-                elif media_type == 'document':
-                    await context.bot.send_document(
-                        chat_id=user['user_id'],
-                        document=file_id,
-                        caption=message_text,
-                        parse_mode='Markdown'
-                    )
-            else:
-                await context.bot.send_message(
-                    chat_id=user['user_id'],
-                    text=message_text,
+            await context.bot.send_message(
+                chat_id=user['user_id'],
+                text=message_text,
+                parse_mode='Markdown'
+            )
+            success_count += 1
+            
+            # Update progress every 10 users
+            if index % 10 == 0:
+                await progress_msg.edit_text(
+                    f"📤 **Broadcasting...**\n\nProgress: {index}/{len(users)}\n✅ Sent: {success_count}\n❌ Failed: {failed_count}",
                     parse_mode='Markdown'
                 )
-            success_count += 1
+            
+            # Rate limiting
+            await asyncio.sleep(0.05)
+            
         except Exception as e:
+            if "blocked" in str(e).lower():
+                blocked_count += 1
             failed_count += 1
             logger.error(f"Broadcast failed for user {user['user_id']}: {e}")
     
-    # Save broadcast stats
-    await db.save_broadcast_stats(message_text, success_count, failed_count)
-    
-    result_text = f"""
-✅ **BROADCAST COMPLETED**
-═════════════════════════════════════════════════════
+    # Final report
+    await progress_msg.edit_text(
+        f"""
+✅ **BROADCAST COMPLETE**
+═══════════════════════════════════════════════════════════════
 
 📊 **Results:**
-   • Successfully Sent: {success_count}
-   • Failed: {failed_count}
-   • Total Attempted: {len(users)}
-   • Success Rate: {(success_count/len(users)*100):.1f}%
+• Total Users: **{len(users)}**
+• Successfully Sent: **{success_count}** ({success_count*100//len(users) if users else 0}%)
+• Failed: **{failed_count}**
+• Blocked Bot: **{blocked_count}**
 
-🕒 **Completed:** {datetime.now().strftime('%d/%m/%Y %H:%M')}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    """
+📅 Completed at: {datetime.now().strftime('%I:%M %p')}
+        """,
+        parse_mode='Markdown'
+    )
     
-    keyboard = [[InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_dashboard")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(result_text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# ==================== USER MANAGEMENT ====================
-
-async def users_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show users management menu"""
-    query = update.callback_query
-    await query.answer()
-    
-    stats = await db.get_user_stats()
-    
-    text = f"""
-👥 **USER MANAGEMENT**
-═════════════════════════════════════════════════════
-
-📊 **Statistics:**
-   • Total Users: {stats.get('total', 0)}
-   • Active (24h): {stats.get('active_24h', 0)}
-   • Premium Users: {stats.get('premium', 0)}
-   • Banned Users: {stats.get('banned', 0)}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**Actions Available:**
-   • Search users by ID/username
-   • Ban/Unban users
-   • View user activity
-   • Export user list
-   • Manage user credits
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    """
-    
-    keyboard = [
-        [
-            InlineKeyboardButton("🔍 Search User", callback_data="user_search"),
-            InlineKeyboardButton("📋 All Users", callback_data="user_list")
-        ],
-        [
-            InlineKeyboardButton("🚫 Banned Users", callback_data="user_banned"),
-            InlineKeyboardButton("⭐ Premium Users", callback_data="user_premium")
-        ],
-        [
-            InlineKeyboardButton("📊 Activity Log", callback_data="user_activity"),
-            InlineKeyboardButton("📥 Export Data", callback_data="user_export")
-        ],
-        [
-            InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_dashboard")
-        ]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# ==================== CREDITS MANAGEMENT ====================
-
-async def credits_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show credits management menu"""
-    query = update.callback_query
-    await query.answer()
-    
-    text = """
-💰 **CREDITS MANAGEMENT**
-═════════════════════════════════════════════════════
-
-Manage user credits and wallet balance.
-
-**Features:**
-   • Add credits to users
-   • Deduct credits from users
-   • View credit history
-   • Set credit expiry
-   • Bulk credit operations
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**Quick Actions:**
-    """
-    
-    keyboard = [
-        [
-            InlineKeyboardButton("➕ Add Credits", callback_data="credits_add"),
-            InlineKeyboardButton("➖ Deduct Credits", callback_data="credits_deduct")
-        ],
-        [
-            InlineKeyboardButton("📜 Credit History", callback_data="credits_history"),
-            InlineKeyboardButton("📊 Statistics", callback_data="credits_stats")
-        ],
-        [
-            InlineKeyboardButton("🎁 Bonus Credits", callback_data="credits_bonus"),
-            InlineKeyboardButton("⏰ Expiry Settings", callback_data="credits_expiry")
-        ],
-        [
-            InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_dashboard")
-        ]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    # Log broadcast
+    await db.log_broadcast({
+        'message': message_text[:100],
+        'total': len(users),
+        'success': success_count,
+        'failed': failed_count,
+        'blocked': blocked_count,
+        'timestamp': datetime.now()
+    })
 
 # ==================== FORCE JOIN MANAGEMENT ====================
 
-async def force_join_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show force join management menu"""
+async def admin_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Manage force join channels/groups"""
     query = update.callback_query
     await query.answer()
     
     channels = await db.get_force_join_channels()
     
-    channels_list = "\n".join([
-        f"   • {ch['title']} (@{ch['username']})" 
-        for ch in channels
-    ]) if channels else "   No channels added yet"
+    channels_text = ""
+    if channels:
+        for idx, ch in enumerate(channels, 1):
+            channels_text += f"{idx}. **{ch['title']}** (`{ch['username']}`)
+   Type: {ch['type'].title()}
+   Status: {'\u2705 Active' if ch['active'] else '\u274c Inactive'}\n\n"
+    else:
+        channels_text = "_No channels/groups configured_"
     
     text = f"""
-🔒 **FORCE JOIN MANAGEMENT**
-═════════════════════════════════════════════════════
+🚪 **FORCE JOIN MANAGEMENT**
+═══════════════════════════════════════════════════════════════
 
-Force users to join specific channels/groups before using the bot.
+📊 **Configured Channels/Groups:**
 
-**Current Force Join Channels:**
-{channels_list}
+{channels_text}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**Features:**
-   ✅ Add unlimited channels/groups
-   ✅ Automatic membership verification
-   ✅ Custom join messages
-   ✅ Redirect after joining
-   ✅ Statistics tracking
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 **Manage:**
     """
     
     keyboard = [
         [
-            InlineKeyboardButton("➕ Add Channel", callback_data="force_join_add"),
-            InlineKeyboardButton("🗑️ Remove Channel", callback_data="force_join_remove")
+            InlineKeyboardButton("➕ Add Channel", callback_data="force_add_channel"),
+            InlineKeyboardButton("➕ Add Group", callback_data="force_add_group")
         ],
         [
-            InlineKeyboardButton("✏️ Edit Message", callback_data="force_join_edit_msg"),
-            InlineKeyboardButton("📊 Statistics", callback_data="force_join_stats")
+            InlineKeyboardButton("❌ Remove Channel", callback_data="force_remove"),
+            InlineKeyboardButton("🔄 Toggle Status", callback_data="force_toggle")
+        ],
+        [
+            InlineKeyboardButton("📊 Test Force Join", callback_data="force_test"),
+            InlineKeyboardButton("🔙 Back", callback_data="admin_dashboard")
+        ]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+
+# ==================== USER CREDIT MANAGEMENT ====================
+
+async def admin_credits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Manage user credits"""
+    query = update.callback_query
+    await query.answer()
+    
+    text = """
+💳 **CREDIT MANAGEMENT SYSTEM**
+═══════════════════════════════════════════════════════════════
+
+📊 **System Overview:**
+• Users can use credits to buy courses
+• 1 Credit = ₹1
+• Credits are non-refundable
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 **Choose action:**
+    """
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("➕ Add Credits", callback_data="credits_add"),
+            InlineKeyboardButton("➖ Remove Credits", callback_data="credits_remove")
+        ],
+        [
+            InlineKeyboardButton("🎯 Set Credits", callback_data="credits_set"),
+            InlineKeyboardButton("📊 View User Credits", callback_data="credits_view")
+        ],
+        [
+            InlineKeyboardButton("🎁 Bulk Credit Award", callback_data="credits_bulk"),
+            InlineKeyboardButton("📊 Leaderboard", callback_data="credits_leaderboard")
         ],
         [
             InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_dashboard")
@@ -467,50 +412,39 @@ Force users to join specific channels/groups before using the bot.
 
 # ==================== ADMIN MANAGEMENT ====================
 
-async def manage_admins_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show admin management menu"""
+async def admin_manage_admins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Manage admin users"""
     query = update.callback_query
     await query.answer()
     
     admins = await db.get_all_admins()
     
-    admins_list = "\n".join([
-        f"   • {admin['name']} (ID: {admin['user_id']}) - {admin['role']}"
-        for admin in admins
-    ])
+    admins_text = ""
+    for admin in admins:
+        status = "🟢 Active" if admin.get('active') else "🔴 Inactive"
+        admins_text += f"• **{admin['name']}** (`{admin['user_id']}`)
+  Level: {admin.get('level', 'Admin').title()} | {status}\n\n"
     
     text = f"""
-👑 **ADMIN MANAGEMENT**
-═════════════════════════════════════════════════════
+👨‍💼 **ADMIN MANAGEMENT**
+═══════════════════════════════════════════════════════════════
 
-**Current Admins ({len(admins)}):**
-{admins_list}
+📈 **Current Admins:** ({len(admins)})
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{admins_text}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Admin Roles:**
-   🔴 Super Admin - Full access
-   🟡 Admin - Limited access
-   🟢 Moderator - Basic access
-
-**Permissions:**
-   • Broadcast messages
-   • Manage users
-   • Manage content
-   • View analytics
-   • Manage courses
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 **Manage:**
     """
     
     keyboard = [
         [
-            InlineKeyboardButton("➕ Add Admin", callback_data="admin_add"),
-            InlineKeyboardButton("➖ Remove Admin", callback_data="admin_remove")
+            InlineKeyboardButton("➕ Add Admin", callback_data="admins_add"),
+            InlineKeyboardButton("❌ Remove Admin", callback_data="admins_remove")
         ],
         [
-            InlineKeyboardButton("✏️ Edit Permissions", callback_data="admin_edit_perms"),
-            InlineKeyboardButton("📜 Activity Log", callback_data="admin_log")
+            InlineKeyboardButton("⚙️ Change Level", callback_data="admins_level"),
+            InlineKeyboardButton("🔒 Toggle Status", callback_data="admins_toggle")
         ],
         [
             InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_dashboard")
@@ -520,129 +454,15 @@ async def manage_admins_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
-# ==================== CONTENT EDITOR ====================
+# ==================== HELPER FUNCTIONS ====================
 
-async def content_editor_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show content editor menu"""
+async def admin_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Close admin panel"""
     query = update.callback_query
-    await query.answer()
-    
-    text = """
-✏️ **CONTENT EDITOR**
-═════════════════════════════════════════════════════
+    await query.answer("Admin panel closed")
+    await query.delete_message()
 
-Customize every text and button in your bot!
-
-**Editable Content:**
-   📝 Welcome Message
-   📝 Help Text
-   📝 Course Templates
-   📝 Payment Messages
-   📝 Success/Error Messages
-   📝 Button Labels
-   📝 Menu Texts
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**Features:**
-   ✅ Live preview
-   ✅ Markdown support
-   ✅ Emoji picker
-   ✅ Template variables
-   ✅ Multi-language support
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    """
-    
-    keyboard = [
-        [
-            InlineKeyboardButton("📝 Welcome Message", callback_data="edit_welcome"),
-            InlineKeyboardButton("❓ Help Text", callback_data="edit_help")
-        ],
-        [
-            InlineKeyboardButton("🎓 Course Template", callback_data="edit_course"),
-            InlineKeyboardButton("💳 Payment Messages", callback_data="edit_payment")
-        ],
-        [
-            InlineKeyboardButton("🔘 Button Labels", callback_data="edit_buttons"),
-            InlineKeyboardButton("🌐 Language", callback_data="edit_language")
-        ],
-        [
-            InlineKeyboardButton("👁️ Preview Changes", callback_data="content_preview"),
-            InlineKeyboardButton("💾 Save All", callback_data="content_save")
-        ],
-        [
-            InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_dashboard")
-        ]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# ==================== AI ASSISTANT ====================
-
-async def ai_assistant_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show AI assistant menu"""
-    query = update.callback_query
-    await query.answer()
-    
-    text = """
-🤖 **AI ASSISTANT**
-═════════════════════════════════════════════════════
-
-Your intelligent admin helper powered by AI!
-
-**What I Can Do:**
-   ✨ Generate course descriptions
-   ✨ Create marketing content
-   ✨ Write broadcast messages
-   ✨ Suggest pricing strategies
-   ✨ Analyze user behavior
-   ✨ Generate reports
-   ✨ Content translation
-   ✨ SEO optimization
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-**Quick Actions:**
-    """
-    
-    keyboard = [
-        [
-            InlineKeyboardButton("✍️ Generate Content", callback_data="ai_generate"),
-            InlineKeyboardButton("📊 Analyze Data", callback_data="ai_analyze")
-        ],
-        [
-            InlineKeyboardButton("💡 Get Suggestions", callback_data="ai_suggest"),
-            InlineKeyboardButton("🌍 Translate", callback_data="ai_translate")
-        ],
-        [
-            InlineKeyboardButton("📈 Marketing Ideas", callback_data="ai_marketing"),
-            InlineKeyboardButton("🎯 Optimize", callback_data="ai_optimize")
-        ],
-        [
-            InlineKeyboardButton("💬 Ask AI", callback_data="ai_ask"),
-            InlineKeyboardButton("📝 Custom Prompt", callback_data="ai_custom")
-        ],
-        [
-            InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_dashboard")
-        ]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# Export handler functions
-__all__ = [
-    'AdminDashboard',
-    'broadcast_menu',
-    'broadcast_create',
-    'broadcast_received',
-    'broadcast_send',
-    'users_menu',
-    'credits_menu',
-    'force_join_menu',
-    'manage_admins_menu',
-    'content_editor_menu',
-    'ai_assistant_menu'
-]
+async def cancel_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancel current action"""
+    await update.message.reply_text("❌ Action cancelled.")
+    return ConversationHandler.END
