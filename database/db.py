@@ -82,6 +82,8 @@ class Database:
                     user_id BIGINT PRIMARY KEY,
                     name VARCHAR(255),
                     role VARCHAR(50) DEFAULT 'admin',
+                    level VARCHAR(50) DEFAULT 'admin',
+                    active BOOLEAN DEFAULT TRUE,
                     permissions JSONB DEFAULT '{}',
                     added_at TIMESTAMP DEFAULT NOW(),
                     added_by BIGINT
@@ -94,6 +96,8 @@ class Database:
                     channel_id BIGINT PRIMARY KEY,
                     username VARCHAR(255),
                     title VARCHAR(255),
+                    type VARCHAR(20) DEFAULT 'channel',
+                    active BOOLEAN DEFAULT TRUE,
                     added_at TIMESTAMP DEFAULT NOW()
                 )
                 """,
@@ -103,8 +107,10 @@ class Database:
                 CREATE TABLE IF NOT EXISTS broadcast_history (
                     id SERIAL PRIMARY KEY,
                     message TEXT,
-                    success_count INTEGER DEFAULT 0,
-                    failed_count INTEGER DEFAULT 0,
+                    total INTEGER DEFAULT 0,
+                    success INTEGER DEFAULT 0,
+                    failed INTEGER DEFAULT 0,
+                    blocked INTEGER DEFAULT 0,
                     sent_at TIMESTAMP DEFAULT NOW(),
                     sent_by BIGINT
                 )
@@ -159,6 +165,12 @@ class Database:
                 )
                 user = await self.fetchrow(
                     "SELECT * FROM users WHERE user_id = $1",
+                    user_id
+                )
+            else:
+                # Update last active
+                await self.execute(
+                    "UPDATE users SET last_active = NOW() WHERE user_id = $1",
                     user_id
                 )
             
@@ -232,6 +244,18 @@ class Database:
     
     # ==================== ADMIN METHODS ====================
     
+    async def is_admin(self, user_id: int) -> bool:
+        """Check if user is admin"""
+        try:
+            result = await self.fetchval(
+                "SELECT COUNT(*) FROM admins WHERE user_id = $1 AND active = TRUE",
+                user_id
+            )
+            return result > 0
+        except Exception as e:
+            logger.error(f"Error checking admin status: {e}")
+            return False
+    
     async def get_admin(self, user_id: int) -> Optional[Dict]:
         """Get admin by user ID"""
         try:
@@ -257,9 +281,9 @@ class Database:
         """Add new admin"""
         try:
             await self.execute(
-                """INSERT INTO admins (user_id, name, role, added_by) 
-                   VALUES ($1, $2, $3, $4) 
-                   ON CONFLICT (user_id) DO UPDATE SET role = $3""",
+                """INSERT INTO admins (user_id, name, role, level, added_by) 
+                   VALUES ($1, $2, $3, $3, $4) 
+                   ON CONFLICT (user_id) DO UPDATE SET role = $3, level = $3""",
                 user_id, name, role, added_by
             )
         except Exception as e:
@@ -272,25 +296,52 @@ class Database:
         except Exception as e:
             logger.error(f"Error removing admin: {e}")
     
+    async def get_admin_stats(self) -> Dict:
+        """Get statistics for admin dashboard"""
+        try:
+            total_users = await self.fetchval("SELECT COUNT(*) FROM users") or 0
+            active_today = await self.fetchval(
+                "SELECT COUNT(*) FROM users WHERE last_active::date = CURRENT_DATE"
+            ) or 0
+            
+            return {
+                'total_users': total_users,
+                'active_today': active_today,
+                'total_courses': 0,
+                'monthly_revenue': 0,
+                'pending_orders': 0
+            }
+        except Exception as e:
+            logger.error(f"Error getting admin stats: {e}")
+            return {
+                'total_users': 0,
+                'active_today': 0,
+                'total_courses': 0,
+                'monthly_revenue': 0,
+                'pending_orders': 0
+            }
+    
     # ==================== FORCE JOIN METHODS ====================
     
     async def get_force_join_channels(self) -> List[Dict]:
-        """Get all force join channels"""
+        """Get all active force join channels"""
         try:
-            rows = await self.fetch("SELECT * FROM force_join_channels ORDER BY added_at DESC")
+            rows = await self.fetch(
+                "SELECT * FROM force_join_channels WHERE active = TRUE ORDER BY added_at DESC"
+            )
             return [dict(row) for row in rows]
         except Exception as e:
             logger.error(f"Error getting force join channels: {e}")
             return []
     
-    async def add_force_join_channel(self, channel_id: int, username: str, title: str):
+    async def add_force_join_channel(self, channel_id: int, username: str, title: str, channel_type: str = 'channel'):
         """Add force join channel"""
         try:
             await self.execute(
-                """INSERT INTO force_join_channels (channel_id, username, title) 
-                   VALUES ($1, $2, $3) 
-                   ON CONFLICT (channel_id) DO UPDATE SET username = $2, title = $3""",
-                channel_id, username, title
+                """INSERT INTO force_join_channels (channel_id, username, title, type) 
+                   VALUES ($1, $2, $3, $4) 
+                   ON CONFLICT (channel_id) DO UPDATE SET username = $2, title = $3, type = $4""",
+                channel_id, username, title, channel_type
             )
         except Exception as e:
             logger.error(f"Error adding force join channel: {e}")
@@ -307,11 +358,62 @@ class Database:
     
     # ==================== BROADCAST METHODS ====================
     
+    async def get_broadcast_stats(self) -> Dict:
+        """Get broadcast statistics"""
+        try:
+            total_users = await self.fetchval("SELECT COUNT(*) FROM users") or 0
+            active_users = await self.fetchval(
+                "SELECT COUNT(*) FROM users WHERE last_active > NOW() - INTERVAL '7 days'"
+            ) or 0
+            
+            last_broadcast = await self.fetchrow(
+                "SELECT * FROM broadcast_history ORDER BY sent_at DESC LIMIT 1"
+            )
+            
+            last_broadcast_time = "Never"
+            success_rate = 0
+            
+            if last_broadcast:
+                last_broadcast_time = last_broadcast['sent_at'].strftime('%d %b %Y, %I:%M %p')
+                if last_broadcast['total'] > 0:
+                    success_rate = int((last_broadcast['success'] / last_broadcast['total']) * 100)
+            
+            return {
+                'total_users': total_users,
+                'active_users': active_users,
+                'last_broadcast': last_broadcast_time,
+                'success_rate': success_rate
+            }
+        except Exception as e:
+            logger.error(f"Error getting broadcast stats: {e}")
+            return {
+                'total_users': 0,
+                'active_users': 0,
+                'last_broadcast': 'Never',
+                'success_rate': 0
+            }
+    
+    async def log_broadcast(self, data: Dict):
+        """Log broadcast to history"""
+        try:
+            await self.execute(
+                """INSERT INTO broadcast_history (message, total, success, failed, blocked, sent_by) 
+                   VALUES ($1, $2, $3, $4, $5, $6)""",
+                data.get('message', '')[:100],
+                data.get('total', 0),
+                data.get('success', 0),
+                data.get('failed', 0),
+                data.get('blocked', 0),
+                data.get('sent_by')
+            )
+        except Exception as e:
+            logger.error(f"Error logging broadcast: {e}")
+    
     async def save_broadcast_stats(self, message: str, success_count: int, failed_count: int, sent_by: int = None):
         """Save broadcast statistics"""
         try:
             await self.execute(
-                """INSERT INTO broadcast_history (message, success_count, failed_count, sent_by) 
+                """INSERT INTO broadcast_history (message, success, failed, sent_by) 
                    VALUES ($1, $2, $3, $4)""",
                 message, success_count, failed_count, sent_by
             )
@@ -391,9 +493,9 @@ class Database:
                 'total_users': total_users,
                 'active_today': active_today,
                 'new_users_week': new_users_week,
-                'total_courses': 0,  # Implement when course table exists
-                'total_revenue': 0,  # Implement when payment table exists
-                'pending_orders': 0  # Implement when order table exists
+                'total_courses': 0,
+                'total_revenue': 0,
+                'pending_orders': 0
             }
         except Exception as e:
             logger.error(f"Error getting bot stats: {e}")
