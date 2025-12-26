@@ -1,13 +1,23 @@
 # Start command and main menu handlers
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes
 import logging
 
 logger = logging.getLogger(__name__)
 
+def get_reply_keyboard():
+    """Get the persistent reply keyboard (bottom menu)"""
+    keyboard = [
+        [KeyboardButton("👨‍💼 Owner"), KeyboardButton("📺 Course Channel")],
+        [KeyboardButton("💬 Discussion"), KeyboardButton("📚 All Courses")],
+        [KeyboardButton("🌐 Website"), KeyboardButton("🎁 Donate")],
+        [KeyboardButton("💸 Resell")]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, persistent=True)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /start command - Show main menu"""
+    """Handle /start command - Show main menu with both keyboards"""
     user = update.effective_user
     
     welcome = f"""
@@ -23,34 +33,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-What would you like to do?
+📋 Use the buttons below to navigate:
     """
     
-    # Main menu keyboard
-    keyboard = [
+    # Inline keyboard for main menu
+    inline_keyboard = [
         [
             InlineKeyboardButton("📚 Courses", callback_data="menu_courses"),
             InlineKeyboardButton("🎬 Proof", callback_data="menu_proof")
         ],
         [
-            InlineKeyboardButton("⚙️ Setting", callback_data="menu_setting"),
-            InlineKeyboardButton("🆕 Latest course", callback_data="menu_latest")
+            InlineKeyboardButton("⚙️ Settings", callback_data="menu_settings"),
+            InlineKeyboardButton("🆕 Latest Course", callback_data="menu_latest")
         ],
         [
-            InlineKeyboardButton("📊 Status", callback_data="menu_status"),
-            InlineKeyboardButton("❓ Request course", callback_data="menu_request")
-        ],
-        [
-            InlineKeyboardButton("👨‍💼 Owner Section", callback_data="menu_owner")
+            InlineKeyboardButton("📊 Statistics", callback_data="menu_statistics"),
+            InlineKeyboardButton("❓ Request Course", callback_data="menu_request")
         ]
     ]
     
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(welcome, reply_markup=reply_markup, parse_mode='Markdown')
+    inline_markup = InlineKeyboardMarkup(inline_keyboard)
+    reply_markup = get_reply_keyboard()
+    
+    await update.message.reply_text(
+        welcome, 
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+    
+    # Send inline menu as separate message
+    await update.message.reply_text(
+        "🎯 **Quick Actions:**\n\nSelect what you want to do:",
+        reply_markup=inline_markup,
+        parse_mode='Markdown'
+    )
+    
     logger.info(f"✅ User {user.id} ({user.username}) started bot")
 
+# ==================== INLINE KEYBOARD HANDLERS ====================
+
 async def menu_courses(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show all courses"""
+    """Show all courses (inline button)"""
     query = update.callback_query
     await query.answer()
     
@@ -86,13 +109,13 @@ async def menu_courses(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """
     
     keyboard = [
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_back")]
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
 async def menu_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show proof/testimonials"""
+    """Show proof/testimonials (inline button)"""
     query = update.callback_query
     await query.answer()
     
@@ -127,13 +150,13 @@ async def menu_proof(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     """
     
     keyboard = [
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_back")]
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
-async def menu_setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """User settings"""
+async def menu_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """User settings (inline button)"""
     query = update.callback_query
     await query.answer()
     
@@ -166,13 +189,13 @@ async def menu_setting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """
     
     keyboard = [
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_back")]
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
 async def menu_latest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show latest courses"""
+    """Show latest courses (inline button)"""
     query = update.callback_query
     await query.answer()
     
@@ -204,19 +227,19 @@ async def menu_latest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     """
     
     keyboard = [
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_back")]
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
-async def menu_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show user status"""
+async def menu_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show user statistics (inline button)"""
     query = update.callback_query
     await query.answer()
     user = query.from_user
     
     text = f"""
-📊 YOUR STATUS
+📊 YOUR STATISTICS
 ═════════════════════════════════════════════════════════════════
 
 👤 User Info:
@@ -245,13 +268,13 @@ async def menu_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     """
     
     keyboard = [
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_back")]
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
 async def menu_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Request a course"""
+    """Request a course (inline button)"""
     query = update.callback_query
     await query.answer()
     
@@ -285,53 +308,69 @@ How to Request:
     
     keyboard = [
         [InlineKeyboardButton("✉️ Send Request", callback_data="send_request")],
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_back")]
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
-async def menu_owner(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show owner section"""
+async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Go back to main inline menu"""
     query = update.callback_query
     await query.answer()
     
+    # Inline keyboard for main menu
+    inline_keyboard = [
+        [
+            InlineKeyboardButton("📚 Courses", callback_data="menu_courses"),
+            InlineKeyboardButton("🎬 Proof", callback_data="menu_proof")
+        ],
+        [
+            InlineKeyboardButton("⚙️ Settings", callback_data="menu_settings"),
+            InlineKeyboardButton("🆕 Latest Course", callback_data="menu_latest")
+        ],
+        [
+            InlineKeyboardButton("📊 Statistics", callback_data="menu_statistics"),
+            InlineKeyboardButton("❓ Request Course", callback_data="menu_request")
+        ]
+    ]
+    
+    inline_markup = InlineKeyboardMarkup(inline_keyboard)
+    
+    await query.edit_message_text(
+        "🎯 **Quick Actions:**\n\nSelect what you want to do:",
+        reply_markup=inline_markup,
+        parse_mode='Markdown'
+    )
+
+# ==================== REPLY KEYBOARD HANDLERS ====================
+
+async def handle_owner(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle Owner button (reply keyboard)"""
     text = """
 👨‍💼 OWNER SECTION
 ═════════════════════════════════════════════════════════════════
 
-🎯 Owner Control Panel:
+🎯 Owner Control Panel
 
-Select what you want to manage:
+Welcome to the Owner Section! Here you can manage all aspects of your course business.
+
+Use the buttons at the bottom to navigate:
+📺 Course Channel - Main announcement channel
+💬 Discussion - Community discussion group
+📚 All Courses - Complete course catalog
+🌐 Website - Official website
+🎁 Donate - Support us
+💸 Resell - Reseller program
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 Tap any button below to get started!
     """
     
-    keyboard = [
-        [
-            InlineKeyboardButton("📺 Course Channel", callback_data="owner_channel"),
-            InlineKeyboardButton("📚 All Courses", callback_data="owner_all_courses")
-        ],
-        [
-            InlineKeyboardButton("💬 Discussion", callback_data="owner_discussion"),
-            InlineKeyboardButton("🌐 Website", callback_data="owner_website")
-        ],
-        [
-            InlineKeyboardButton("🎁 Donate", callback_data="owner_donate"),
-            InlineKeyboardButton("💸 Resell", callback_data="owner_resell")
-        ],
-        [
-            InlineKeyboardButton("🔗 Refer & Earn", callback_data="owner_refer")
-        ],
-        [
-            InlineKeyboardButton("🔙 Back", callback_data="menu_back")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    await update.message.reply_text(text, parse_mode='Markdown')
 
-async def owner_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Owner - Course Channel"""
-    query = update.callback_query
-    await query.answer()
-    
+async def handle_course_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle Course Channel button (reply keyboard)"""
     text = """
 📺 COURSE CHANNEL
 ═════════════════════════════════════════════════════════════════
@@ -352,20 +391,57 @@ async def owner_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
    Engagement: High
 
 🔔 Enable Notifications to never miss updates!
+
+🔗 Join here: https://t.me/coursepro911
     """
     
     keyboard = [
-        [InlineKeyboardButton("🔗 Join Channel", url="https://t.me/coursepro911")],
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_owner")]
+        [InlineKeyboardButton("🔗 Join Channel", url="https://t.me/coursepro911")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-async def owner_all_courses(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Owner - All Courses List"""
-    query = update.callback_query
-    await query.answer()
     
+    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+
+async def handle_discussion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle Discussion button (reply keyboard)"""
+    text = """
+💬 DISCUSSION COMMUNITY
+═════════════════════════════════════════════════════════════════
+
+🗣️ Join Our Discussion Community:
+
+@coursepro_discussion - Main Discussion Group
+   ✅ Ask questions & get instant answers
+   ✅ Share resources & tips
+   ✅ Discuss course content
+   ✅ Network with fellow learners
+   ✅ Get expert guidance
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👥 Community Stats:
+   Active Members: 2000+
+   Daily Discussions: 50+
+   Response Time: < 30 minutes
+
+💡 Benefits:
+   ✅ Free expert support
+   ✅ Peer learning
+   ✅ Job opportunities
+   ✅ Exclusive networking
+
+🔗 Join here: https://t.me/coursepro_discussion
+    """
+    
+    keyboard = [
+        [InlineKeyboardButton("💬 Join Discussion", url="https://t.me/coursepro_discussion")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+
+async def handle_all_courses(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle All Courses button (reply keyboard)"""
     text = """
 📚 ALL COURSES
 ═════════════════════════════════════════════════════════════════
@@ -401,56 +477,10 @@ async def owner_all_courses(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 📊 Total: 20+ Courses | 10000+ Students | 98% Satisfaction
     """
     
-    keyboard = [
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_owner")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    await update.message.reply_text(text, parse_mode='Markdown')
 
-async def owner_discussion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Owner - Discussion Group"""
-    query = update.callback_query
-    await query.answer()
-    
-    text = """
-💬 DISCUSSION COMMUNITY
-═════════════════════════════════════════════════════════════════
-
-🗣️ Join Our Discussion Community:
-
-@coursepro_discussion - Main Discussion Group
-   ✅ Ask questions & get instant answers
-   ✅ Share resources & tips
-   ✅ Discuss course content
-   ✅ Network with fellow learners
-   ✅ Get expert guidance
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-👥 Community Stats:
-   Active Members: 2000+
-   Daily Discussions: 50+
-   Response Time: < 30 minutes
-
-💡 Benefits:
-   ✅ Free expert support
-   ✅ Peer learning
-   ✅ Job opportunities
-   ✅ Exclusive networking
-    """
-    
-    keyboard = [
-        [InlineKeyboardButton("💬 Join Discussion", url="https://t.me/coursepro_discussion")],
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_owner")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-async def owner_website(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Owner - Website"""
-    query = update.callback_query
-    await query.answer()
-    
+async def handle_website(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle Website button (reply keyboard)"""
     text = """
 🌐 OFFICIAL WEBSITE
 ═════════════════════════════════════════════════════════════════
@@ -474,20 +504,19 @@ www.coursepro911.com
    ✅ Progress tracking
    ✅ Certificate downloads
    ✅ Course forums
+
+🔗 Visit: https://www.coursepro911.com
     """
     
     keyboard = [
-        [InlineKeyboardButton("🌐 Visit Website", url="https://www.coursepro911.com")],
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_owner")]
+        [InlineKeyboardButton("🌐 Visit Website", url="https://www.coursepro911.com")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-async def owner_donate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Owner - Donate Section"""
-    query = update.callback_query
-    await query.answer()
     
+    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+
+async def handle_donate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle Donate button (reply keyboard)"""
     text = """
 🎁 SUPPORT US - DONATE
 ═════════════════════════════════════════════════════════════════
@@ -522,17 +551,14 @@ Your donation helps us:
     """
     
     keyboard = [
-        [InlineKeyboardButton("💚 Donate Now", callback_data="donate_now")],
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_owner")]
+        [InlineKeyboardButton("💚 Donate Now", callback_data="donate_now")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-async def owner_resell(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Owner - Resell Program"""
-    query = update.callback_query
-    await query.answer()
     
+    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+
+async def handle_resell(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle Resell button (reply keyboard)"""
     text = """
 💸 RESELL PROGRAM
 ═════════════════════════════════════════════════════════════════
@@ -569,105 +595,13 @@ Earn money by reselling our courses!
     """
     
     keyboard = [
-        [InlineKeyboardButton("📝 Apply Now", callback_data="resell_apply")],
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_owner")]
+        [InlineKeyboardButton("📝 Apply Now", callback_data="resell_apply")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-async def owner_refer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Owner - Refer and Earn Program"""
-    query = update.callback_query
-    await query.answer()
-    user = query.from_user
     
-    text = f"""
-🔗 REFER & EARN PROGRAM
-═════════════════════════════════════════════════════════════════
+    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
-💚 Earn by Referring Friends:
-
-✅ 20% commission on friend's first purchase
-✅ 10% on all future purchases they make
-✅ Lifetime earning relationship
-✅ Unlimited referrals
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-💰 Earning Example:
-
-   Friend buys course worth ₹1000
-   Your Commission (20%): ₹200 (first purchase)
-   
-   Friend buys another course ₹2000
-   Your Commission (10%): ₹200 (future purchases)
-   
-   Refer 10 friends: ₹2000+ monthly income!
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 Your Referral Link:
-   https://t.me/coursepro911?start=ref_{user.id}
-
-👥 Your Stats:
-   Total Referrals: 3
-   Total Earnings: ₹500
-   Pending: ₹200
-
-📊 Top Referrers earn ₹50,000+ monthly!
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    """
-    
-    keyboard = [
-        [InlineKeyboardButton("📋 View Dashboard", callback_data="refer_dashboard")],
-        [InlineKeyboardButton("🔙 Back", callback_data="menu_owner")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-async def menu_back(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Go back to main menu"""
-    query = update.callback_query
-    await query.answer()
-    
-    welcome = """
-🌐 𝐂𝐎𝐔𝐑𝐒𝐄 𝐏𝐑𝐎 𝐁𝐎𝐓
-═══════════════════════════════════════════════════════════════
-
-👋 Welcome back!
-
-🎓 Learn amazing courses from industry experts
-💰 100% secure & instant payment verification
-❤️ Save favorites to your wishlist
-🎁 Get exclusive discounts & referral rewards
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-What would you like to do?
-    """
-    
-    keyboard = [
-        [
-            InlineKeyboardButton("📚 Courses", callback_data="menu_courses"),
-            InlineKeyboardButton("🎬 Proof", callback_data="menu_proof")
-        ],
-        [
-            InlineKeyboardButton("⚙️ Setting", callback_data="menu_setting"),
-            InlineKeyboardButton("🆕 Latest course", callback_data="menu_latest")
-        ],
-        [
-            InlineKeyboardButton("📊 Status", callback_data="menu_status"),
-            InlineKeyboardButton("❓ Request course", callback_data="menu_request")
-        ],
-        [
-            InlineKeyboardButton("👨‍💼 Owner Section", callback_data="menu_owner")
-        ]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(welcome, reply_markup=reply_markup, parse_mode='Markdown')
-
+# Handler mapping for remaining callbacks
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle remaining callbacks"""
     query = update.callback_query
@@ -678,7 +612,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "send_request": "📝 Please describe the course you'd like us to create...",
         "donate_now": "💚 Thank you for your generosity! Donation link coming soon...",
         "resell_apply": "📝 Please fill out the reseller application form...",
-        "refer_dashboard": "📊 Your referral dashboard is loading...",
     }
     
     if callback_data in responses:
