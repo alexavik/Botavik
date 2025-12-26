@@ -9,7 +9,15 @@ from telegram.ext import (
     CallbackQueryHandler, MessageHandler, filters
 )
 from config import BotConfig
-from handlers.admin_panel import admin_panel
+from handlers.admin_panel import (
+    admin_panel,
+    admin_create_course_callback,
+    admin_manage_courses_callback,
+    admin_analytics_callback,
+    admin_settings_callback,
+    admin_orders_callback,
+    cancel_admin
+)
 from handlers.course_manager import start_course_creation
 from handlers.course_buyer import browse_courses
 from database.db import db
@@ -46,12 +54,12 @@ async def start(update, context):
         
         if param.startswith("buy_"):
             course_id = int(param.split("_")[1])
-            await show_course_details(update, context, course_id)
+            await browse_courses(update, context)
             return
         
         elif param.startswith("wish_"):
             course_id = int(param.split("_")[1])
-            await handle_wishlist(update, context, course_id)
+            await browse_courses(update, context)
             return
     
     # Normal /start without params
@@ -71,12 +79,6 @@ Hi {user.first_name}! 🙂
 
 What would you like to do?
     """
-    
-    buttons = [
-        [{"text": "📚 Browse Courses", "url": f"https://t.me/{BotConfig.BOT_USERNAME}"}],
-        [{"text": "❤️ My Wishlist", "callback_data": "view_wishlist"}],
-        [{"text": "🎓 My Courses", "callback_data": "my_courses"}]
-    ]
     
     await update.message.reply_text(welcome, parse_mode='Markdown')
     logger.info(f"✅ User {user.id} started bot")
@@ -127,7 +129,7 @@ Need more help? /support
 # Build conversation handler for course creation
 course_conv_handler = ConversationHandler(
     entry_points=[
-        CallbackQueryHandler(start_course_creation, pattern='^create_course$'),
+        CallbackQueryHandler(start_course_creation, pattern='^admin_create_course$'),
         CommandHandler('create', start_course_creation)
     ],
     states={
@@ -177,6 +179,14 @@ def main():
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(CommandHandler('admin', admin_panel))
+    
+    # Admin panel callback handlers
+    application.add_handler(CallbackQueryHandler(admin_create_course_callback, pattern='^admin_create_course$'))
+    application.add_handler(CallbackQueryHandler(admin_manage_courses_callback, pattern='^admin_manage_courses$'))
+    application.add_handler(CallbackQueryHandler(admin_analytics_callback, pattern='^admin_analytics$'))
+    application.add_handler(CallbackQueryHandler(admin_settings_callback, pattern='^admin_settings$'))
+    application.add_handler(CallbackQueryHandler(admin_orders_callback, pattern='^admin_orders$'))
+    application.add_handler(CallbackQueryHandler(cancel_admin, pattern='^cancel$'))
     
     # Course creation conversation
     application.add_handler(course_conv_handler)
