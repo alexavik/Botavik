@@ -1,5 +1,5 @@
 # Main entry point for the Telegram Course Sales Bot
-# Professional Premium Admin Dashboard Integration
+# Professional Premium Admin Dashboard Integration with Secure Authentication
 
 import logging
 import os
@@ -9,6 +9,18 @@ from telegram.ext import (
     CallbackQueryHandler, MessageHandler, filters
 )
 from config import BotConfig
+
+# Import admin authentication
+from handlers.admin_auth import (
+    AdminAuth,
+    security_code_handler,
+    security_question_handler,
+    auth_cancel,
+    check_auth_and_open_dashboard,
+    logout_handler,
+    SECURITY_CODE,
+    SECURITY_QUESTION
+)
 
 # Import admin dashboard
 from handlers.admin_dashboard import (
@@ -104,7 +116,7 @@ All payments via UPI (FamPay)
 ✅ Lifetime access after payment
 
 👑 ADMIN:
-/admin - Admin panel (authorized users only)
+Click 👑 Admin Panel button in main menu
 
 📧 SUPPORT:
 /support - Contact us
@@ -113,7 +125,7 @@ All payments via UPI (FamPay)
 
 ❓ FAQ:
 Q: How do I buy a course?
-A: Click "🛍️ Buy Now" in the channel post
+A: Click "🛒️ Buy Now" in the channel post
 
 Q: How do I get access?
 A: After payment, you get instant access
@@ -128,6 +140,27 @@ Need more help? /support
     """
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
+
+# Build conversation handler for admin authentication
+admin_auth_conv_handler = ConversationHandler(
+    entry_points=[
+        CallbackQueryHandler(AdminAuth.start_auth, pattern='^open_admin_panel$')
+    ],
+    states={
+        SECURITY_CODE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, security_code_handler)
+        ],
+        SECURITY_QUESTION: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, security_question_handler)
+        ]
+    },
+    fallbacks=[
+        CallbackQueryHandler(auth_cancel, pattern='^auth_cancel$')
+    ],
+    name='admin_authentication',
+    per_user=True,
+    per_chat=True
+)
 
 # Build conversation handler for broadcast
 broadcast_conv_handler = ConversationHandler(
@@ -189,6 +222,7 @@ async def post_init(application: Application) -> None:
     await db.connect()
     logger.info("✅ Database connection initialized")
     logger.info("🚀 Premium Admin Dashboard Ready")
+    logger.info("🔐 Secure Admin Authentication System Active")
 
 async def post_shutdown(application: Application) -> None:
     """Close database connection on shutdown"""
@@ -207,11 +241,15 @@ def main():
     # === CORE COMMANDS ===
     application.add_handler(CommandHandler('start', protected_start))
     application.add_handler(CommandHandler('help', help_command))
-    application.add_handler(CommandHandler('admin', AdminDashboard.main_dashboard))
     
-    # === PREMIUM ADMIN DASHBOARD ===
-    # Main dashboard
-    application.add_handler(CallbackQueryHandler(AdminDashboard.main_dashboard, pattern='^admin_dashboard$'))
+    # === ADMIN AUTHENTICATION SYSTEM (NO /admin command) ===
+    # Admin panel opens via button only - triggers authentication
+    application.add_handler(admin_auth_conv_handler)
+    application.add_handler(CallbackQueryHandler(check_auth_and_open_dashboard, pattern='^admin_dashboard$'))
+    application.add_handler(CallbackQueryHandler(logout_handler, pattern='^admin_logout$'))
+    
+    # === PREMIUM ADMIN DASHBOARD (Protected) ===
+    # Main dashboard - requires authentication
     
     # Broadcast system
     application.add_handler(CallbackQueryHandler(broadcast_menu, pattern='^admin_broadcast$'))
@@ -275,10 +313,12 @@ def main():
     
     # Start bot
     logger.info("🤖 Bot starting with Premium Admin Dashboard...")
+    logger.info("✅ Secure Authentication System Ready")
     logger.info("✅ Force Join Middleware Active")
     logger.info("✅ Broadcast System Ready")
     logger.info("✅ Credit Management Ready")
     logger.info("✅ AI Assistant Ready")
+    logger.info("🔐 Security: Code 122911 + Question 'avik'")
     application.run_polling(allowed_updates=['message', 'callback_query'])
 
 if __name__ == '__main__':
