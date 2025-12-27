@@ -1,1 +1,407 @@
-# Force Join Channel Manager Handler\n# Manage force join channels through admin panel with buttons\n\nfrom telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup\nfrom telegram.ext import ContextTypes, ConversationHandler\nfrom telegram.error import TelegramError\nimport logging\n\nlogger = logging.getLogger(__name__)\n\n# Conversation states\nAWAIT_ACTION = 1\nAWAIT_CHANNEL_ID = 2\nAWAIT_CHANNEL_USERNAME = 3\nAWAIT_CHANNEL_TITLE = 4\nAWAIT_CONFIRM_ADD = 5\nAWAIT_DELETE_CHANNEL = 6\n\nclass ForceJoinManager:\n    \"\"\"Manage force join channels through admin panel\"\"\"\n    \n    def __init__(self, db):\n        self.db = db\n    \n    async def show_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:\n        \"\"\"Show force join management menu\"\"\"\n        query = update.callback_query\n        await query.answer()\n        \n        # Get current force join channels\n        channels = self.db.get_force_join_channels()\n        \n        text = \"\"\"🚪 FORCE JOIN CHANNEL MANAGER\n═══════════════════════════════════════════════════════════════\n\n📊 Current Force Join Channels: {}\n\n{}─ What would you like to do?\n        \"\"\".format(\n            len(channels),\n            \"\\n\".join([f\"✅ @{ch['username']} (ID: {ch['channel_id']})\" for ch in channels]) if channels else \"📭 No channels added yet\\n\"\n        )\n        \n        keyboard = [\n            [InlineKeyboardButton(\"➕ Add Channel\", callback_data=\"fj_add_channel\")],\n            [InlineKeyboardButton(\"❌ Remove Channel\", callback_data=\"fj_remove_channel\")],\n            [InlineKeyboardButton(\"🔄 Refresh List\", callback_data=\"fj_refresh\")],\n            [InlineKeyboardButton(\"🔙 Back to Admin\", callback_data=\"admin_dashboard\")]\n        ]\n        \n        reply_markup = InlineKeyboardMarkup(keyboard)\n        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')\n        return AWAIT_ACTION\n    \n    async def add_channel_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:\n        \"\"\"Start adding a new force join channel\"\"\"\n        query = update.callback_query\n        await query.answer()\n        \n        text = \"\"\"➕ ADD NEW FORCE JOIN CHANNEL\n═══════════════════════════════════════════════════════════════\n\n📝 Step 1/3: Send Channel ID\n\n💡 How to get channel ID:\n1. Forward a message from the channel to @userinfobot\n2. Bot will show you the channel ID (negative number like -1001234567890)\n3. Copy and send that ID\n\n⚠️ Important:\n- Channel must be public\n- Bot must be admin in the channel\n- You'll be asked to verify bot admin status\n        \"\"\"\n        \n        keyboard = [\n            [InlineKeyboardButton(\"❌ Cancel\", callback_data=\"fj_menu\")]\n        ]\n        reply_markup = InlineKeyboardMarkup(keyboard)\n        \n        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')\n        context.user_data['fj_step'] = 1\n        return AWAIT_CHANNEL_ID\n    \n    async def get_channel_id(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:\n        \"\"\"Get channel ID from user\"\"\"\n        try:\n            channel_id = int(update.message.text.strip())\n        except ValueError:\n            await update.message.reply_text(\n                \"❌ Invalid channel ID!\\n\\n\"\n                \"Channel ID must be a number (like -1001234567890)\\n\\n\"\n                \"Try again:\"\n            )\n            return AWAIT_CHANNEL_ID\n        \n        # Validate channel ID format\n        if not str(channel_id).startswith('-100'):\n            await update.message.reply_text(\n                \"⚠️ Channel ID seems incorrect.\\n\\n\"\n                \"Valid channel ID should start with -100 (like -1001234567890)\\n\\n\"\n                \"Try again:\"\n            )\n            return AWAIT_CHANNEL_ID\n        \n        # Check if already added\n        existing = self.db.get_force_join_channel(channel_id)\n        if existing:\n            await update.message.reply_text(\n                \"✅ This channel is already in force join list!\\n\\n\"\n                \"Use 'Remove Channel' if you want to remove it.\"\n            )\n            return ConversationHandler.END\n        \n        context.user_data['fj_channel_id'] = channel_id\n        \n        text = \"\"\"📝 Step 2/3: Send Channel Username\n═══════════════════════════════════════════════════════════════\n\n💡 Channel username format:\n- Without @: coursepro911\n- Or with @: @coursepro911\n- Both formats work!\n\n⚠️ Important:\n- Must be a PUBLIC channel\n- Anyone must be able to join by username\n- Private channels don't work\n\nSend channel username:\n        \"\"\"\n        \n        keyboard = [\n            [InlineKeyboardButton(\"❌ Cancel\", callback_data=\"fj_menu\")]\n        ]\n        reply_markup = InlineKeyboardMarkup(keyboard)\n        \n        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')\n        return AWAIT_CHANNEL_USERNAME\n    \n    async def get_channel_username(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:\n        \"\"\"Get channel username from user\"\"\"\n        username = update.message.text.strip().replace('@', '').lower()\n        \n        # Validate username\n        if not username or len(username) < 3:\n            await update.message.reply_text(\n                \"❌ Invalid username!\\n\\n\"\n                \"Channel username must be at least 3 characters.\\n\\n\"\n                \"Try again:\"\n            )\n            return AWAIT_CHANNEL_USERNAME\n        \n        if not username.isalnum() or '-' in username and not all(c.isalnum() or c == '_' for c in username):\n            await update.message.reply_text(\n                \"❌ Invalid username format!\\n\\n\"\n                \"Username can only have letters, numbers, and underscores.\\n\\n\"\n                \"Try again:\"\n            )\n            return AWAIT_CHANNEL_USERNAME\n        \n        context.user_data['fj_username'] = username\n        \n        text = \"\"\"📝 Step 3/3: Send Channel Title\n═══════════════════════════════════════════════════════════════\n\n💡 Examples:\n- \"Cybersecurity Mastery Course\"\n- \"Course Updates & Announcements\"\n- \"Premium Content Channel\"\n\nSend a short, descriptive title for this channel:\n        \"\"\"\n        \n        keyboard = [\n            [InlineKeyboardButton(\"❌ Cancel\", callback_data=\"fj_menu\")]\n        ]\n        reply_markup = InlineKeyboardMarkup(keyboard)\n        \n        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')\n        return AWAIT_CHANNEL_TITLE\n    \n    async def get_channel_title(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:\n        \"\"\"Get channel title and show confirmation\"\"\"\n        title = update.message.text.strip()\n        \n        if not title or len(title) < 3:\n            await update.message.reply_text(\n                \"❌ Title too short!\\n\\n\"\n                \"Please provide a descriptive title (at least 3 characters).\\n\\n\"\n                \"Try again:\"\n            )\n            return AWAIT_CHANNEL_TITLE\n        \n        if len(title) > 100:\n            await update.message.reply_text(\n                \"❌ Title too long!\\n\\n\"\n                \"Please keep it under 100 characters.\\n\\n\"\n                \"Try again:\"\n            )\n            return AWAIT_CHANNEL_TITLE\n        \n        context.user_data['fj_title'] = title\n        \n        # Show confirmation\n        channel_id = context.user_data['fj_channel_id']\n        username = context.user_data['fj_username']\n        \n        text = \"\"\"✅ VERIFY CHANNEL DETAILS\n═══════════════════════════════════════════════════════════════\n\n📋 Channel Information:\n\n🆔 Channel ID: `{}`\n👤 Username: `@{}`\n📌 Title: `{}`\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n⚠️ IMPORTANT - Bot Admin Requirements:\n\nBefore confirming, make sure:\n✅ Bot is admin in the channel\n✅ Bot has permission to delete messages\n✅ Channel is PUBLIC (not private)\n✅ Username is correct\n\nIf bot isn't admin yet:\n1. Add @{}_bot as admin to the channel\n2. Give it all permissions\n3. Then click ✅ Confirm\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n        \"\"\".format(channel_id, username, title, \"coursepro911\" )  # Use your bot username\n        \n        keyboard = [\n            [InlineKeyboardButton(\"✅ Confirm & Add\", callback_data=\"fj_confirm_add\")],\n            [InlineKeyboardButton(\"❌ Cancel\", callback_data=\"fj_menu\")]\n        ]\n        reply_markup = InlineKeyboardMarkup(keyboard)\n        \n        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')\n        return AWAIT_CONFIRM_ADD\n    \n    async def confirm_add_channel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:\n        \"\"\"Confirm and add the force join channel to database\"\"\"\n        query = update.callback_query\n        await query.answer()\n        \n        channel_id = context.user_data.get('fj_channel_id')\n        username = context.user_data.get('fj_username')\n        title = context.user_data.get('fj_title')\n        \n        if not all([channel_id, username, title]):\n            await query.edit_message_text(\n                \"❌ Error: Missing data. Please start again.\\n\\n\"\n                \"Click 'Force Join Manager' to retry.\"\n            )\n            return ConversationHandler.END\n        \n        try:\n            # Add to database\n            self.db.add_force_join_channel(channel_id, username, title)\n            \n            text = \"\"\"✅ CHANNEL ADDED SUCCESSFULLY!\n═══════════════════════════════════════════════════════════════\n\n🎉 Force join channel added to the system!\n\n📋 Details:\n🆔 Channel ID: `{}`\n👤 Username: `@{}`\n📌 Title: `{}`\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n✅ What happens now:\n\n1. 🔄 All users will see \"Join Required\" message\n2. 👥 They'll need to join @{} to use the bot\n3. ✅ Bot will auto-verify membership\n4. 📊 You can remove it anytime from admin panel\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n            \"\"\".format(channel_id, username, title, username)\n            \n            keyboard = [\n                [InlineKeyboardButton(\"🚪 Back to Manager\", callback_data=\"fj_menu\")],\n                [InlineKeyboardButton(\"🔙 Back to Admin\", callback_data=\"admin_dashboard\")]\n            ]\n            reply_markup = InlineKeyboardMarkup(keyboard)\n            \n            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')\n            \n            # Clear temporary data\n            context.user_data.pop('fj_channel_id', None)\n            context.user_data.pop('fj_username', None)\n            context.user_data.pop('fj_title', None)\n            \n            return ConversationHandler.END\n            \n        except Exception as e:\n            logger.error(f\"Error adding force join channel: {e}\")\n            await query.edit_message_text(\n                f\"❌ Error adding channel: {str(e)}\\n\\n\"\n                \"Please try again or contact support.\"\n            )\n            return ConversationHandler.END\n    \n    async def remove_channel_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:\n        \"\"\"Start removing a force join channel\"\"\"\n        query = update.callback_query\n        await query.answer()\n        \n        # Get current force join channels\n        channels = self.db.get_force_join_channels()\n        \n        if not channels:\n            await query.edit_message_text(\n                \"📭 No force join channels to remove!\\n\\n\"\n                \"Use 'Add Channel' to add one first.\",\n                reply_markup=InlineKeyboardMarkup([\n                    [InlineKeyboardButton(\"🔙 Back\", callback_data=\"fj_menu\")]\n                ])\n            )\n            return ConversationHandler.END\n        \n        text = \"\"\"❌ REMOVE FORCE JOIN CHANNEL\n═══════════════════════════════════════════════════════════════\n\n👇 Select a channel to remove:\n\n        \"\"\"\n        \n        keyboard = []\n        for ch in channels:\n            keyboard.append([\n                InlineKeyboardButton(\n                    f\"❌ @{ch['username']} ({ch['title']})\",\n                    callback_data=f\"fj_delete_{ch['channel_id']}\"\n                )\n            ])\n        \n        keyboard.append([InlineKeyboardButton(\"🔙 Cancel\", callback_data=\"fj_menu\")])\n        reply_markup = InlineKeyboardMarkup(keyboard)\n        \n        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')\n        return AWAIT_DELETE_CHANNEL\n    \n    async def delete_channel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:\n        \"\"\"Delete a force join channel\"\"\"\n        query = update.callback_query\n        \n        # Extract channel ID from callback data\n        channel_id = int(query.data.split('_')[2])\n        \n        await query.answer()\n        \n        try:\n            channel = self.db.get_force_join_channel(channel_id)\n            \n            if not channel:\n                await query.edit_message_text(\n                    \"❌ Channel not found!\\n\\n\"\n                    \"It may have been already removed.\"\n                )\n                return ConversationHandler.END\n            \n            # Delete from database\n            self.db.remove_force_join_channel(channel_id)\n            \n            text = \"\"\"✅ CHANNEL REMOVED!\n═══════════════════════════════════════════════════════════════\n\n✅ Force join channel has been removed!\n\n📋 Removed Channel:\n👤 @{}\n📌 {}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n✅ What happens now:\n\n1. Users will no longer see \"Join Required\" message\n2. They can use the bot normally\n3. No verification needed anymore\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n            \"\"\".format(channel['username'], channel['title'])\n            \n            keyboard = [\n                [InlineKeyboardButton(\"🚪 Back to Manager\", callback_data=\"fj_menu\")],\n                [InlineKeyboardButton(\"🔙 Back to Admin\", callback_data=\"admin_dashboard\")]\n            ]\n            reply_markup = InlineKeyboardMarkup(keyboard)\n            \n            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')\n            return ConversationHandler.END\n            \n        except Exception as e:\n            logger.error(f\"Error removing force join channel: {e}\")\n            await query.edit_message_text(\n                f\"❌ Error removing channel: {str(e)}\\n\\n\"\n                \"Please try again or contact support.\"\n            )\n            return ConversationHandler.END\n    \n    async def refresh_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:\n        \"\"\"Refresh the force join channels list\"\"\"\n        return await self.show_menu(update, context)\n    \n    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:\n        \"\"\"Cancel operation\"\"\"\n        if update.callback_query:\n            query = update.callback_query\n            await query.answer()\n        \n        return ConversationHandler.END\n"
+# Force Join Channel Manager Handler
+# Manage force join channels through admin panel with buttons
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes, ConversationHandler
+from telegram.error import TelegramError
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Conversation states
+AWAIT_ACTION = 1
+AWAIT_CHANNEL_ID = 2
+AWAIT_CHANNEL_USERNAME = 3
+AWAIT_CHANNEL_TITLE = 4
+AWAIT_CONFIRM_ADD = 5
+AWAIT_DELETE_CHANNEL = 6
+
+
+class ForceJoinManager:
+    """Manage force join channels through admin panel"""
+    
+    def __init__(self, db):
+        self.db = db
+    
+    async def show_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Show force join management menu"""
+        query = update.callback_query
+        await query.answer()
+        
+        # Get current force join channels
+        channels = self.db.get_force_join_channels()
+        
+        text = """🚪 FORCE JOIN CHANNEL MANAGER
+═══════════════════════════════════════════════════════════════
+
+📊 Current Force Join Channels: {}
+
+{}─ What would you like to do?
+        """.format(
+            len(channels),
+            "\n".join([f"✅ @{ch['username']} (ID: {ch['channel_id']})" for ch in channels]) if channels else "📭No channels added yet\n"
+        )
+        
+        keyboard = [
+            [InlineKeyboardButton("➕ Add Channel", callback_data="fj_add_channel")],
+            [InlineKeyboardButton("❌ Remove Channel", callback_data="fj_remove_channel")],
+            [InlineKeyboardButton("🔄 Refresh List", callback_data="fj_refresh")],
+            [InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_dashboard")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        return AWAIT_ACTION
+    
+    async def add_channel_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Start adding a new force join channel"""
+        query = update.callback_query
+        await query.answer()
+        
+        text = """➕ ADD NEW FORCE JOIN CHANNEL
+═══════════════════════════════════════════════════════════════
+
+📝 Step 1/3: Send Channel ID
+
+💡 How to get channel ID:
+1. Forward a message from the channel to @userinfobot
+2. Bot will show you the channel ID (negative number like -1001234567890)
+3. Copy and send that ID
+
+⚠️ Important:
+- Channel must be public
+- Bot must be admin in the channel
+- You'll be asked to verify bot admin status
+        """
+        
+        keyboard = [
+            [InlineKeyboardButton("❌ Cancel", callback_data="fj_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        context.user_data['fj_step'] = 1
+        return AWAIT_CHANNEL_ID
+    
+    async def get_channel_id(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Get channel ID from user"""
+        try:
+            channel_id = int(update.message.text.strip())
+        except ValueError:
+            await update.message.reply_text(
+                "❌ Invalid channel ID!\n\n"
+                "Channel ID must be a number (like -1001234567890)\n\n"
+                "Try again:"
+            )
+            return AWAIT_CHANNEL_ID
+        
+        # Validate channel ID format
+        if not str(channel_id).startswith('-100'):
+            await update.message.reply_text(
+                "⚠️ Channel ID seems incorrect.\n\n"
+                "Valid channel ID should start with -100 (like -1001234567890)\n\n"
+                "Try again:"
+            )
+            return AWAIT_CHANNEL_ID
+        
+        # Check if already added
+        existing = self.db.get_force_join_channel(channel_id)
+        if existing:
+            await update.message.reply_text(
+                "✅ This channel is already in force join list!\n\n"
+                "Use 'Remove Channel' if you want to remove it."
+            )
+            return ConversationHandler.END
+        
+        context.user_data['fj_channel_id'] = channel_id
+        
+        text = """📝 Step 2/3: Send Channel Username
+═══════════════════════════════════════════════════════════════
+
+💡 Channel username format:
+- Without @: coursepro911
+- Or with @: @coursepro911
+- Both formats work!
+
+⚠️ Important:
+- Must be a PUBLIC channel
+- Anyone must be able to join by username
+- Private channels don't work
+
+Send channel username:
+        """
+        
+        keyboard = [
+            [InlineKeyboardButton("❌ Cancel", callback_data="fj_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        return AWAIT_CHANNEL_USERNAME
+    
+    async def get_channel_username(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Get channel username from user"""
+        username = update.message.text.strip().replace('@', '').lower()
+        
+        # Validate username
+        if not username or len(username) < 3:
+            await update.message.reply_text(
+                "❌ Invalid username!\n\n"
+                "Channel username must be at least 3 characters.\n\n"
+                "Try again:"
+            )
+            return AWAIT_CHANNEL_USERNAME
+        
+        context.user_data['fj_username'] = username
+        
+        text = """📝 Step 3/3: Send Channel Title
+═══════════════════════════════════════════════════════════════
+
+💡 Examples:
+- "Cybersecurity Mastery Course"
+- "Course Updates & Announcements"
+- "Premium Content Channel"
+
+Send a short, descriptive title for this channel:
+        """
+        
+        keyboard = [
+            [InlineKeyboardButton("❌ Cancel", callback_data="fj_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        return AWAIT_CHANNEL_TITLE
+    
+    async def get_channel_title(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Get channel title and show confirmation"""
+        title = update.message.text.strip()
+        
+        if not title or len(title) < 3:
+            await update.message.reply_text(
+                "❌ Title too short!\n\n"
+                "Please provide a descriptive title (at least 3 characters).\n\n"
+                "Try again:"
+            )
+            return AWAIT_CHANNEL_TITLE
+        
+        if len(title) > 100:
+            await update.message.reply_text(
+                "❌ Title too long!\n\n"
+                "Please keep it under 100 characters.\n\n"
+                "Try again:"
+            )
+            return AWAIT_CHANNEL_TITLE
+        
+        context.user_data['fj_title'] = title
+        
+        # Show confirmation
+        channel_id = context.user_data['fj_channel_id']
+        username = context.user_data['fj_username']
+        
+        text = f"""✅ VERIFY CHANNEL DETAILS
+═══════════════════════════════════════════════════════════════
+
+📋 Channel Information:
+
+🆔 Channel ID: `{channel_id}`
+👤 Username: `@{username}`
+📌 Title: `{title}`
+
+──────────────────────────────────────────────────────────────
+
+⚠️ IMPORTANT - Bot Admin Requirements:
+
+Before confirming, make sure:
+✅ Bot is admin in the channel
+✅ Bot has permission to delete messages
+✅ Channel is PUBLIC (not private)
+✅ Username is correct
+
+──────────────────────────────────────────────────────────────
+        """
+        
+        keyboard = [
+            [InlineKeyboardButton("✅ Confirm & Add", callback_data="fj_confirm_add")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="fj_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        return AWAIT_CONFIRM_ADD
+    
+    async def confirm_add_channel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Confirm and add the force join channel to database"""
+        query = update.callback_query
+        await query.answer()
+        
+        channel_id = context.user_data.get('fj_channel_id')
+        username = context.user_data.get('fj_username')
+        title = context.user_data.get('fj_title')
+        
+        if not all([channel_id, username, title]):
+            await query.edit_message_text(
+                "❌ Error: Missing data. Please start again.\n\n"
+                "Click 'Force Join Manager' to retry."
+            )
+            return ConversationHandler.END
+        
+        try:
+            # Add to database
+            self.db.add_force_join_channel(channel_id, username, title)
+            
+            text = f"""✅ CHANNEL ADDED SUCCESSFULLY!
+═══════════════════════════════════════════════════════════════
+
+🎉 Force join channel added to the system!
+
+📋 Details:
+🆔 Channel ID: `{channel_id}`
+👤 Username: `@{username}`
+📌 Title: `{title}`
+
+──────────────────────────────────────────────────────────────
+
+✅ What happens now:
+
+1. 🔄 All users will see "Join Required" message
+2. 👥 They'll need to join @{username} to use the bot
+3. ✅ Bot will auto-verify membership
+4. 📊 You can remove it anytime from admin panel
+
+──────────────────────────────────────────────────────────────
+            """
+            
+            keyboard = [
+                [InlineKeyboardButton("🚪 Back to Manager", callback_data="fj_menu")],
+                [InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_dashboard")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+            
+            # Clear temporary data
+            context.user_data.pop('fj_channel_id', None)
+            context.user_data.pop('fj_username', None)
+            context.user_data.pop('fj_title', None)
+            
+            return ConversationHandler.END
+            
+        except Exception as e:
+            logger.error(f"Error adding force join channel: {e}")
+            await query.edit_message_text(
+                f"❌ Error adding channel: {str(e)}\n\n"
+                "Please try again or contact support."
+            )
+            return ConversationHandler.END
+    
+    async def remove_channel_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Start removing a force join channel"""
+        query = update.callback_query
+        await query.answer()
+        
+        # Get current force join channels
+        channels = self.db.get_force_join_channels()
+        
+        if not channels:
+            await query.edit_message_text(
+                "📭 No force join channels to remove!\n\n"
+                "Use 'Add Channel' to add one first.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Back", callback_data="fj_menu")]
+                ])
+            )
+            return ConversationHandler.END
+        
+        text = """❌ REMOVE FORCE JOIN CHANNEL
+═══════════════════════════════════════════════════════════════
+
+👇 Select a channel to remove:
+
+        """
+        
+        keyboard = []
+        for ch in channels:
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"❌ @{ch['username']} ({ch['title']})",
+                    callback_data=f"fj_delete_{ch['channel_id']}"
+                )
+            ])
+        
+        keyboard.append([InlineKeyboardButton("🔙 Cancel", callback_data="fj_menu")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        return AWAIT_DELETE_CHANNEL
+    
+    async def delete_channel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Delete a force join channel"""
+        query = update.callback_query
+        
+        # Extract channel ID from callback data
+        channel_id = int(query.data.split('_')[2])
+        
+        await query.answer()
+        
+        try:
+            channel = self.db.get_force_join_channel(channel_id)
+            
+            if not channel:
+                await query.edit_message_text(
+                    "❌ Channel not found!\n\n"
+                    "It may have been already removed."
+                )
+                return ConversationHandler.END
+            
+            # Delete from database
+            self.db.remove_force_join_channel(channel_id)
+            
+            text = f"""✅ CHANNEL REMOVED!
+═══════════════════════════════════════════════════════════════
+
+✅ Force join channel has been removed!
+
+📋 Removed Channel:
+👤 @{channel['username']}
+📌 {channel['title']}
+
+──────────────────────────────────────────────────────────────
+
+✅ What happens now:
+
+1. Users will no longer see "Join Required" message
+2. They can use the bot normally
+3. No verification needed anymore
+
+──────────────────────────────────────────────────────────────
+            """
+            
+            keyboard = [
+                [InlineKeyboardButton("🚪 Back to Manager", callback_data="fj_menu")],
+                [InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_dashboard")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+            return ConversationHandler.END
+            
+        except Exception as e:
+            logger.error(f"Error removing force join channel: {e}")
+            await query.edit_message_text(
+                f"❌ Error removing channel: {str(e)}\n\n"
+                "Please try again or contact support."
+            )
+            return ConversationHandler.END
+    
+    async def refresh_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Refresh the force join channels list"""
+        return await self.show_menu(update, context)
+    
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Cancel operation"""
+        if update.callback_query:
+            query = update.callback_query
+            await query.answer()
+        
+        return ConversationHandler.END
