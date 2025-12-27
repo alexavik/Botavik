@@ -33,10 +33,22 @@ from handlers.admin_dashboard import (
     BROADCAST_MESSAGE
 )
 
+# Import force join manager
+from handlers.force_join_manager import (
+    ForceJoinManager,
+    AWAIT_ACTION,
+    AWAIT_CHANNEL_ID,
+    AWAIT_CHANNEL_USERNAME,
+    AWAIT_CHANNEL_TITLE,
+    AWAIT_CONFIRM_ADD,
+    AWAIT_DELETE_CHANNEL
+)
+
 # Import force join middleware
 try:
     from middleware.force_join import force_join_middleware, verify_force_join
 except ImportError:
+    logger = logging.getLogger(__name__)
     logger.warning("⚠️ force_join middleware not found, force join disabled")
     async def force_join_middleware(update, context):
         return True
@@ -103,7 +115,7 @@ async def help_command(update, context):
     Show help menu
     """
     help_text = """
-❓ HELP & SUPPORT
+❎ HELP & SUPPORT
 ═══════════════════════════════════════════════════════════════
 
 📚 COURSES:
@@ -128,9 +140,9 @@ Click 👑 Admin Panel button in main menu
 /feedback - Send feedback
 /report - Report issue
 
-❓ FAQ:
+❎ FAQ:
 Q: How do I buy a course?
-A: Click "🛍️ Buy Now" in the channel post
+A: Click "🛒 Buy Now" in the channel post
 
 Q: How do I get access?
 A: After payment, you get instant access
@@ -166,6 +178,45 @@ admin_auth_conv_handler = ConversationHandler(
         CallbackQueryHandler(AdminAuth.cancel_auth, pattern='^cancel_auth$')
     ],
     name='admin_authentication',
+    per_user=True,
+    per_chat=True
+)
+
+
+# === FORCE JOIN MANAGER CONVERSATION HANDLER ===
+force_join_conv_handler = ConversationHandler(
+    entry_points=[
+        CallbackQueryHandler(lambda u, c: ForceJoinManager(db).show_menu(u, c), pattern='^fj_menu$'),
+        CallbackQueryHandler(lambda u, c: ForceJoinManager(db).show_menu(u, c), pattern='^admin_force_join$')
+    ],
+    states={
+        AWAIT_ACTION: [
+            CallbackQueryHandler(lambda u, c: ForceJoinManager(db).add_channel_start(u, c), pattern='^fj_add_channel$'),
+            CallbackQueryHandler(lambda u, c: ForceJoinManager(db).remove_channel_start(u, c), pattern='^fj_remove_channel$'),
+            CallbackQueryHandler(lambda u, c: ForceJoinManager(db).refresh_menu(u, c), pattern='^fj_refresh$'),
+        ],
+        AWAIT_CHANNEL_ID: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: ForceJoinManager(db).get_channel_id(u, c))
+        ],
+        AWAIT_CHANNEL_USERNAME: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: ForceJoinManager(db).get_channel_username(u, c))
+        ],
+        AWAIT_CHANNEL_TITLE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: ForceJoinManager(db).get_channel_title(u, c))
+        ],
+        AWAIT_CONFIRM_ADD: [
+            CallbackQueryHandler(lambda u, c: ForceJoinManager(db).confirm_add_channel(u, c), pattern='^fj_confirm_add$')
+        ],
+        AWAIT_DELETE_CHANNEL: [
+            CallbackQueryHandler(lambda u, c: ForceJoinManager(db).delete_channel(u, c), pattern='^fj_delete_')
+        ]
+    },
+    fallbacks=[
+        CallbackQueryHandler(lambda u, c: ForceJoinManager(db).show_menu(u, c), pattern='^fj_menu$'),
+        CallbackQueryHandler(lambda u, c: AdminDashboard.main_dashboard(u, c), pattern='^admin_dashboard$'),
+        CallbackQueryHandler(lambda u, c: ConversationHandler.END, pattern='^cancel$')
+    ],
+    name='force_join_manager',
     per_user=True,
     per_chat=True
 )
@@ -239,8 +290,9 @@ async def post_init(application: Application) -> None:
     logger.info("✅ Database connection initialized")
     logger.info("🚀 Premium Admin Dashboard Ready")
     logger.info("🔐 Secure 2-Step Authentication System Active")
+    logger.info("🚪 Force Join Channel Manager Active")
     logger.info("🔑 Security Code: 122911")
-    logger.info("❓ Security Question: What is your name? → avik")
+    logger.info("❎ Security Question: What is your name? → avik")
 
 
 async def post_shutdown(application: Application) -> None:
@@ -269,6 +321,9 @@ def main():
     # === ADMIN AUTHENTICATION SYSTEM (Button-only access, NO /admin command) ===
     application.add_handler(admin_auth_conv_handler)
     
+    # === FORCE JOIN MANAGER (New professional system) ===
+    application.add_handler(force_join_conv_handler)
+    
     # === PREMIUM ADMIN DASHBOARD (Protected by authentication) ===
     # Main dashboard - requires authentication
     application.add_handler(CallbackQueryHandler(AdminDashboard.main_dashboard, pattern='^admin_dashboard$'))
@@ -284,10 +339,6 @@ def main():
     
     # Credits management
     application.add_handler(CallbackQueryHandler(credits_menu, pattern='^admin_credits$'))
-    
-    # Force join management
-    application.add_handler(CallbackQueryHandler(force_join_menu, pattern='^admin_force_join$'))
-    application.add_handler(CallbackQueryHandler(verify_force_join, pattern='^verify_force_join$'))
     
     # Admin management
     application.add_handler(CallbackQueryHandler(manage_admins_menu, pattern='^admin_manage_admins$'))
@@ -308,17 +359,17 @@ def main():
     application.add_handler(CallbackQueryHandler(back_to_menu, pattern='^back_to_menu$'))
     
     # === REPLY KEYBOARD HANDLERS (Bottom Menu) ===
-    application.add_handler(MessageHandler(filters.Regex('^👨‍💼 Owner$'), handle_owner))
-    application.add_handler(MessageHandler(filters.Regex('^📺 Course Channel$'), handle_course_channel))
-    application.add_handler(MessageHandler(filters.Regex('^💬 Discussion$'), handle_discussion))
-    application.add_handler(MessageHandler(filters.Regex('^📚 All Courses$'), handle_all_courses))
-    application.add_handler(MessageHandler(filters.Regex('^🌐 Website$'), handle_website))
-    application.add_handler(MessageHandler(filters.Regex('^🎁 Donate$'), handle_donate))
-    application.add_handler(MessageHandler(filters.Regex('^💸 Resell$'), handle_resell))
+    application.add_handler(MessageHandler(filters.Regex('^\ud83d\udc68\u200d\ud83d\udcbc Owner$'), handle_owner))
+    application.add_handler(MessageHandler(filters.Regex('^\ud83d\udcfa Course Channel$'), handle_course_channel))
+    application.add_handler(MessageHandler(filters.Regex('^\ud83d\udcac Discussion$'), handle_discussion))
+    application.add_handler(MessageHandler(filters.Regex('^\ud83d\udcda All Courses$'), handle_all_courses))
+    application.add_handler(MessageHandler(filters.Regex('^\ud83c\udf10 Website$'), handle_website))
+    application.add_handler(MessageHandler(filters.Regex('^\ud83c\udf81 Donate$'), handle_donate))
+    application.add_handler(MessageHandler(filters.Regex('^\ud83d\udcb8 Resell$'), handle_resell))
     
     # === OLD ADMIN PANEL CALLBACKS (Legacy Support) ===
     application.add_handler(CallbackQueryHandler(admin_panel, pattern='^admin_panel$'))
-    application.add_handler(CallbackQueryHandler(admin_create_course_callback, pattern='^admin_create_course$'))
+    application.add_handler(CallbackQueryHandler(admin_create_course_callback, pattern='^admin_create_course_old$'))
     application.add_handler(CallbackQueryHandler(admin_manage_courses_callback, pattern='^admin_manage_courses$'))
     application.add_handler(CallbackQueryHandler(admin_analytics_callback, pattern='^admin_analytics$'))
     application.add_handler(CallbackQueryHandler(admin_settings_callback, pattern='^admin_settings$'))
@@ -337,11 +388,12 @@ def main():
     # Start bot
     logger.info("🤖 Bot starting with Premium Admin Dashboard...")
     logger.info("✅ Secure 2-Step Authentication System Ready")
-    logger.info("✅ Force Join Middleware Active")
+    logger.info("✅ Force Join Channel Manager Ready (Button-Based)")
     logger.info("✅ Broadcast System Ready")
     logger.info("✅ Credit Management Ready")
     logger.info("✅ AI Assistant Ready")
     logger.info("🔐 Security: Code '122911' + Question 'avik'")
+    logger.info("🚪 Force Join Manager: Professional button-based interface")
     logger.info("🔒 Admin access: Button only (no /admin command)")
     application.run_polling(allowed_updates=['message', 'callback_query'])
 
