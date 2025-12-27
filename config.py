@@ -49,7 +49,7 @@ class AIConfig:
         'google/gemini-2.0-flash-exp'
     )
     
-    # AI Features Toggle
+    # AI Features Toggle - FIXED: Convert to boolean safely
     AI_ENABLED = os.getenv('AI_ENABLED', 'True').lower() == 'true'
     
     # API Configuration
@@ -107,15 +107,15 @@ class AppConfig:
     LOG_FILE = os.getenv('LOG_FILE', 'logs/bot.log')
     
     # Rate limiting
-    BROADCAST_DELAY = float(os.getenv('BROADCAST_DELAY', 0.1))  # seconds between broadcasts
-    MAX_BROADCAST_SIZE = int(os.getenv('MAX_BROADCAST_SIZE', 100))  # batch size
+    BROADCAST_DELAY = float(os.getenv('BROADCAST_DELAY', '0.1'))  # seconds between broadcasts
+    MAX_BROADCAST_SIZE = int(os.getenv('MAX_BROADCAST_SIZE', '100'))  # batch size
     
-    # Features
+    # Features - FIXED: Get string value first before calling .lower()
     ENABLE_COURSES = os.getenv('ENABLE_COURSES', 'True').lower() == 'true'
     ENABLE_PAYMENTS = os.getenv('ENABLE_PAYMENTS', 'True').lower() == 'true'
     ENABLE_FORCE_JOIN = os.getenv('ENABLE_FORCE_JOIN', 'True').lower() == 'true'
     ENABLE_ADMIN_DASHBOARD = os.getenv('ENABLE_ADMIN_DASHBOARD', 'True').lower() == 'true'
-    ENABLE_AI_FEATURES = os.getenv('ENABLE_AI_FEATURES', AIConfig.AI_ENABLED).lower() == 'true'
+    ENABLE_AI_FEATURES = os.getenv('ENABLE_AI_FEATURES', 'True').lower() == 'true'
 
 
 class ValidationConfig:
