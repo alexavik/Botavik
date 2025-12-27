@@ -7,6 +7,7 @@ from database.db import db
 from services.ai_service import ai_service
 from config import BotConfig, AIConfig
 from handlers.admin_auth import AdminAuth
+from handlers.force_join_manager import ForceJoinManager
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +20,14 @@ AI_PROMPT = 5
 CONTENT_KEY = 6
 CONTENT_VALUE = 7
 
+# Initialize Force Join Manager
+force_join_manager = ForceJoinManager(db)
+
 
 class AdminDashboard:
-    """Premium Admin Dashboard Handler with Secure Authentication"""
+    """
+    Premium Admin Dashboard Handler with Secure Authentication
+    """
     
     @staticmethod
     async def main_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -376,46 +382,14 @@ async def credits_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def force_join_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Force join channel management
+    Force join channel management - integrated with ForceJoinManager
     """
     # Check authentication
     if not await AdminAuth.check_auth_middleware(update, context):
         return
     
-    query = update.callback_query
-    
-    try:
-        channels = await db.get_force_join_channels()
-        channel_list = ""
-        
-        for i, ch in enumerate(channels, 1):
-            channel_list += f"{i}. @{ch['username']} - {ch['title']}\n"
-        
-        if not channel_list:
-            channel_list = "No channels configured yet"
-        
-        text = f"""
-🚪 **FORCE JOIN MANAGEMENT**
-═══════════════════════════════════════════════════════════════
-
-**Active Channels/Groups:**
-{channel_list}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        """
-        
-        keyboard = [
-            [InlineKeyboardButton("➕ Add Channel", callback_data="fj_add_channel")],
-            [InlineKeyboardButton("➕ Add Group", callback_data="fj_add_group")],
-            [InlineKeyboardButton("❌ Remove Channel", callback_data="fj_remove")],
-            [InlineKeyboardButton("🔙 Back", callback_data="admin_dashboard")]
-        ]
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-    
-    except Exception as e:
-        logger.error(f"❌ Error in force_join_menu: {e}")
-        await query.answer(f"❌ Error: {str(e)[:50]}", show_alert=True)
+    # Use ForceJoinManager to show menu
+    return await force_join_manager.show_menu(update, context)
 
 
 async def manage_admins_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
