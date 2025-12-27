@@ -142,7 +142,7 @@ Click 👑 Admin Panel button in main menu
 
 ❎ FAQ:
 Q: How do I buy a course?
-A: Click "🛒 Buy Now" in the channel post
+A: Click "🛍 Buy Now" in the channel post
 
 Q: How do I get access?
 A: After payment, you get instant access
@@ -179,7 +179,8 @@ admin_auth_conv_handler = ConversationHandler(
     ],
     name='admin_authentication',
     per_user=True,
-    per_chat=True
+    per_chat=True,
+    per_message=False
 )
 
 
@@ -218,7 +219,8 @@ force_join_conv_handler = ConversationHandler(
     ],
     name='force_join_manager',
     per_user=True,
-    per_chat=True
+    per_chat=True,
+    per_message=False
 )
 
 
@@ -229,7 +231,8 @@ broadcast_conv_handler = ConversationHandler(
     ],
     states={
         BROADCAST_MESSAGE: [
-            MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.DOCUMENT, broadcast_received)
+            # FIXED: Changed filters.DOCUMENT to filters.Document
+            MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL, broadcast_received)
         ]
     },
     fallbacks=[
@@ -359,13 +362,13 @@ def main():
     application.add_handler(CallbackQueryHandler(back_to_menu, pattern='^back_to_menu$'))
     
     # === REPLY KEYBOARD HANDLERS (Bottom Menu) ===
-    application.add_handler(MessageHandler(filters.Regex('^\ud83d\udc68\u200d\ud83d\udcbc Owner$'), handle_owner))
-    application.add_handler(MessageHandler(filters.Regex('^\ud83d\udcfa Course Channel$'), handle_course_channel))
-    application.add_handler(MessageHandler(filters.Regex('^\ud83d\udcac Discussion$'), handle_discussion))
-    application.add_handler(MessageHandler(filters.Regex('^\ud83d\udcda All Courses$'), handle_all_courses))
-    application.add_handler(MessageHandler(filters.Regex('^\ud83c\udf10 Website$'), handle_website))
-    application.add_handler(MessageHandler(filters.Regex('^\ud83c\udf81 Donate$'), handle_donate))
-    application.add_handler(MessageHandler(filters.Regex('^\ud83d\udcb8 Resell$'), handle_resell))
+    application.add_handler(MessageHandler(filters.Regex('^👨‍💼 Owner$'), handle_owner))
+    application.add_handler(MessageHandler(filters.Regex('^📺 Course Channel$'), handle_course_channel))
+    application.add_handler(MessageHandler(filters.Regex('^💬 Discussion$'), handle_discussion))
+    application.add_handler(MessageHandler(filters.Regex('^📚 All Courses$'), handle_all_courses))
+    application.add_handler(MessageHandler(filters.Regex('^🌐 Website$'), handle_website))
+    application.add_handler(MessageHandler(filters.Regex('^🎁 Donate$'), handle_donate))
+    application.add_handler(MessageHandler(filters.Regex('^💸 Resell$'), handle_resell))
     
     # === OLD ADMIN PANEL CALLBACKS (Legacy Support) ===
     application.add_handler(CallbackQueryHandler(admin_panel, pattern='^admin_panel$'))
