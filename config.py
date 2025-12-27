@@ -126,3 +126,66 @@ class ValidationConfig:
     MAX_COURSE_DESCRIPTION_LENGTH = 2000
     MIN_PRICE = 0.01
     MAX_PRICE = 1000000
+
+
+class ValidationRules:
+    """Validation Rules for Course Data"""
+    
+    # Course Title Validation
+    MIN_TITLE_LENGTH = 5
+    MAX_TITLE_LENGTH = 150
+    
+    # Course Description Validation
+    MIN_DESCRIPTION_LENGTH = 20
+    MAX_DESCRIPTION_LENGTH = 2000
+    
+    # Price Validation
+    MIN_PRICE = 0.01
+    MAX_PRICE = 1000000
+    
+    # URL Validation
+    ALLOWED_URL_SCHEMES = ['http', 'https']
+    MAX_URL_LENGTH = 500
+    
+    # File Validation
+    ALLOWED_IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+    ALLOWED_VIDEO_FORMATS = ['mp4', 'avi', 'mov', 'mkv']
+    MAX_FILE_SIZE_MB = 50
+    
+    # Text Validation
+    MAX_MESSAGE_LENGTH = 4096  # Telegram limit
+    MAX_CAPTION_LENGTH = 1024  # Telegram limit
+    
+    # Numeric Validation
+    MIN_COURSE_DURATION = 1  # minutes
+    MAX_COURSE_DURATION = 10000  # minutes
+    
+    # User Input Validation
+    MAX_USERNAME_LENGTH = 32
+    MIN_USERNAME_LENGTH = 3
+    
+    # Admin Validation
+    MIN_ADMIN_LEVEL = 1
+    MAX_ADMIN_LEVEL = 10
+    
+    @staticmethod
+    def is_valid_price(price: float) -> bool:
+        """Check if price is valid"""
+        return ValidationRules.MIN_PRICE <= price <= ValidationRules.MAX_PRICE
+    
+    @staticmethod
+    def is_valid_title(title: str) -> bool:
+        """Check if title is valid"""
+        return ValidationRules.MIN_TITLE_LENGTH <= len(title) <= ValidationRules.MAX_TITLE_LENGTH
+    
+    @staticmethod
+    def is_valid_description(description: str) -> bool:
+        """Check if description is valid"""
+        return ValidationRules.MIN_DESCRIPTION_LENGTH <= len(description) <= ValidationRules.MAX_DESCRIPTION_LENGTH
+    
+    @staticmethod
+    def is_valid_url(url: str) -> bool:
+        """Check if URL is valid"""
+        if not url or len(url) > ValidationRules.MAX_URL_LENGTH:
+            return False
+        return any(url.startswith(f"{scheme}://") for scheme in ValidationRules.ALLOWED_URL_SCHEMES)
