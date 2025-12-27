@@ -31,7 +31,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 ❤️ Save favorites to your wishlist
 🎁 Get exclusive discounts & referral rewards
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📋 Use the buttons below to navigate:
     """
@@ -49,6 +49,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         [
             InlineKeyboardButton("📊 Statistics", callback_data="menu_statistics"),
             InlineKeyboardButton("❓ Request Course", callback_data="menu_request")
+        ],
+        [
+            InlineKeyboardButton("👑 Admin Panel", callback_data="open_admin_panel")
         ]
     ]
     
@@ -331,6 +334,9 @@ async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         [
             InlineKeyboardButton("📊 Statistics", callback_data="menu_statistics"),
             InlineKeyboardButton("❓ Request Course", callback_data="menu_request")
+        ],
+        [
+            InlineKeyboardButton("👑 Admin Panel", callback_data="open_admin_panel")
         ]
     ]
     
