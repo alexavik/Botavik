@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from database.db import db
 from services.ai_service import ai_service
 from config import BotConfig, AIConfig
+from handlers.admin_auth import AdminAuth
 
 logger = logging.getLogger(__name__)
 
@@ -20,23 +21,19 @@ CONTENT_VALUE = 7
 
 
 class AdminDashboard:
-    """Premium Admin Dashboard Handler"""
+    """Premium Admin Dashboard Handler with Secure Authentication"""
     
     @staticmethod
     async def main_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Main admin dashboard with statistics and control panels
+        Requires authentication via security code + question
         """
         user = update.effective_user
         query = update.callback_query
         
-        # Check if admin
-        is_admin = await db.is_admin(user.id)
-        if not is_admin:
-            if query:
-                await query.answer("❌ You are not an admin!", show_alert=True)
-            else:
-                await update.message.reply_text("❌ Access denied: Admin only")
+        # 🔒 CHECK AUTHENTICATION FIRST
+        if not await AdminAuth.check_auth_middleware(update, context):
             return
         
         # Get statistics
@@ -90,6 +87,9 @@ class AdminDashboard:
                 [
                     InlineKeyboardButton("📚 Docs", callback_data="admin_docs"),
                     InlineKeyboardButton("📝 Logs", callback_data="admin_logs")
+                ],
+                [
+                    InlineKeyboardButton("🚪 Logout", callback_data="admin_logout")
                 ]
             ]
             
@@ -112,7 +112,7 @@ class AdminDashboard:
             logger.error(f"❌ Error in main dashboard: {e}")
             error_text = f"😨 **Error Loading Dashboard**\n\n`{str(e)[:200]}`"
             if query:
-                await query.answer(❌ An error occurred", show_alert=True)
+                await query.answer("❌ An error occurred", show_alert=True)
             else:
                 await update.message.reply_text(error_text, parse_mode='Markdown')
 
@@ -121,6 +121,10 @@ async def broadcast_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Broadcast management menu
     """
+    # Check authentication
+    if not await AdminAuth.check_auth_middleware(update, context):
+        return
+    
     query = update.callback_query
     
     text = f"""
@@ -153,6 +157,10 @@ async def broadcast_create(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Start broadcast creation
     """
+    # Check authentication
+    if not await AdminAuth.check_auth_middleware(update, context):
+        return
+    
     query = update.callback_query
     
     text = """
@@ -214,6 +222,10 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Send broadcast to all users
     """
+    # Check authentication
+    if not await AdminAuth.check_auth_middleware(update, context):
+        return
+    
     query = update.callback_query
     message_text = context.user_data.get('broadcast_message')
     user = update.effective_user
@@ -292,6 +304,10 @@ async def users_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     User management menu
     """
+    # Check authentication
+    if not await AdminAuth.check_auth_middleware(update, context):
+        return
+    
     query = update.callback_query
     
     try:
@@ -328,6 +344,10 @@ async def credits_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Credit management menu
     """
+    # Check authentication
+    if not await AdminAuth.check_auth_middleware(update, context):
+        return
+    
     query = update.callback_query
     
     text = """
@@ -358,6 +378,10 @@ async def force_join_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Force join channel management
     """
+    # Check authentication
+    if not await AdminAuth.check_auth_middleware(update, context):
+        return
+    
     query = update.callback_query
     
     try:
@@ -398,6 +422,10 @@ async def manage_admins_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """
     Admin management menu
     """
+    # Check authentication
+    if not await AdminAuth.check_auth_middleware(update, context):
+        return
+    
     query = update.callback_query
     
     try:
@@ -437,6 +465,10 @@ async def content_editor_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     """
     Content customization menu
     """
+    # Check authentication
+    if not await AdminAuth.check_auth_middleware(update, context):
+        return
+    
     query = update.callback_query
     
     text = """
@@ -465,6 +497,10 @@ async def ai_assistant_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     AI Assistant menu with Gemini 2.0 Flash integration
     """
+    # Check authentication
+    if not await AdminAuth.check_auth_middleware(update, context):
+        return
+    
     query = update.callback_query
     
     # Check if AI is configured
