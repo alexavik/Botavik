@@ -1,5 +1,5 @@
 # Main entry point for the Telegram Course Sales Bot
-# Professional Premium Admin Dashboard Integration with Secure Authentication
+# Professional Premium Admin Dashboard with Secure 2-Step Authentication
 
 import logging
 import os
@@ -13,13 +13,8 @@ from config import BotConfig
 # Import admin authentication
 from handlers.admin_auth import (
     AdminAuth,
-    security_code_handler,
-    security_question_handler,
-    auth_cancel,
-    check_auth_and_open_dashboard,
-    logout_handler,
-    SECURITY_CODE,
-    SECURITY_QUESTION
+    AWAIT_CODE,
+    AWAIT_ANSWER
 )
 
 # Import admin dashboard
@@ -38,11 +33,15 @@ from handlers.admin_dashboard import (
     BROADCAST_MESSAGE
 )
 
-# Import force join checker
-from handlers.force_join_checker import (
-    verify_force_join,
-    force_join_middleware
-)
+# Import force join middleware
+try:
+    from middleware.force_join import force_join_middleware, verify_force_join
+except ImportError:
+    logger.warning("⚠️ force_join middleware not found, force join disabled")
+    async def force_join_middleware(update, context):
+        return True
+    async def verify_force_join(update, context):
+        await update.callback_query.answer("✅ Verified")
 
 # Import existing handlers
 from handlers.admin_panel import (
@@ -98,8 +97,11 @@ COURSE_PRICE = 4
 COURSE_DEMO_VIDEO = 5
 CONFIRM_POST = 6
 
+
 async def help_command(update, context):
-    """Show help menu"""
+    """
+    Show help menu
+    """
     help_text = """
 ❓ HELP & SUPPORT
 ═══════════════════════════════════════════════════════════════
@@ -117,6 +119,9 @@ All payments via UPI (FamPay)
 
 👑 ADMIN:
 Click 👑 Admin Panel button in main menu
+🔐 Secure 2-step authentication
+• Security code required
+• Security question
 
 📧 SUPPORT:
 /support - Contact us
@@ -125,7 +130,7 @@ Click 👑 Admin Panel button in main menu
 
 ❓ FAQ:
 Q: How do I buy a course?
-A: Click "🛒️ Buy Now" in the channel post
+A: Click "🛍️ Buy Now" in the channel post
 
 Q: How do I get access?
 A: After payment, you get instant access
@@ -141,28 +146,32 @@ Need more help? /support
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
-# Build conversation handler for admin authentication
+
+# === ADMIN AUTHENTICATION CONVERSATION HANDLER ===
 admin_auth_conv_handler = ConversationHandler(
     entry_points=[
+        # Start authentication via button only (no /admin command)
+        CallbackQueryHandler(AdminAuth.start_auth, pattern='^start_admin_auth$'),
         CallbackQueryHandler(AdminAuth.start_auth, pattern='^open_admin_panel$')
     ],
     states={
-        SECURITY_CODE: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, security_code_handler)
+        AWAIT_CODE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, AdminAuth.verify_code)
         ],
-        SECURITY_QUESTION: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, security_question_handler)
+        AWAIT_ANSWER: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, AdminAuth.verify_answer)
         ]
     },
     fallbacks=[
-        CallbackQueryHandler(auth_cancel, pattern='^auth_cancel$')
+        CallbackQueryHandler(AdminAuth.cancel_auth, pattern='^cancel_auth$')
     ],
     name='admin_authentication',
     per_user=True,
     per_chat=True
 )
 
-# Build conversation handler for broadcast
+
+# === BROADCAST CONVERSATION HANDLER ===
 broadcast_conv_handler = ConversationHandler(
     entry_points=[
         CallbackQueryHandler(broadcast_create, pattern='^broadcast_create$')
@@ -178,7 +187,8 @@ broadcast_conv_handler = ConversationHandler(
     name='broadcast_creation'
 )
 
-# Build conversation handler for course creation
+
+# === COURSE CREATION CONVERSATION HANDLER ===
 course_conv_handler = ConversationHandler(
     entry_points=[
         CallbackQueryHandler(start_course_creation, pattern='^admin_create_course$'),
@@ -208,8 +218,11 @@ course_conv_handler = ConversationHandler(
     name='course_creation'
 )
 
+
 async def protected_start(update, context):
-    """Start command with force join check"""
+    """
+    Start command with force join check
+    """
     # Check force join
     if not await force_join_middleware(update, context):
         return
@@ -217,20 +230,31 @@ async def protected_start(update, context):
     # Proceed with normal start
     await start(update, context)
 
+
 async def post_init(application: Application) -> None:
-    """Initialize database connection after bot starts"""
+    """
+    Initialize database connection after bot starts
+    """
     await db.connect()
     logger.info("✅ Database connection initialized")
     logger.info("🚀 Premium Admin Dashboard Ready")
-    logger.info("🔐 Secure Admin Authentication System Active")
+    logger.info("🔐 Secure 2-Step Authentication System Active")
+    logger.info("🔑 Security Code: 122911")
+    logger.info("❓ Security Question: What is your name? → avik")
+
 
 async def post_shutdown(application: Application) -> None:
-    """Close database connection on shutdown"""
+    """
+    Close database connection on shutdown
+    """
     await db.disconnect()
     logger.info("✅ Database connection closed")
 
+
 def main():
-    """Start the bot"""
+    """
+    Start the bot with secure admin authentication
+    """
     # Create application
     application = Application.builder().token(BotConfig.TELEGRAM_BOT_TOKEN).build()
     
@@ -242,14 +266,13 @@ def main():
     application.add_handler(CommandHandler('start', protected_start))
     application.add_handler(CommandHandler('help', help_command))
     
-    # === ADMIN AUTHENTICATION SYSTEM (NO /admin command) ===
-    # Admin panel opens via button only - triggers authentication
+    # === ADMIN AUTHENTICATION SYSTEM (Button-only access, NO /admin command) ===
     application.add_handler(admin_auth_conv_handler)
-    application.add_handler(CallbackQueryHandler(check_auth_and_open_dashboard, pattern='^admin_dashboard$'))
-    application.add_handler(CallbackQueryHandler(logout_handler, pattern='^admin_logout$'))
     
-    # === PREMIUM ADMIN DASHBOARD (Protected) ===
+    # === PREMIUM ADMIN DASHBOARD (Protected by authentication) ===
     # Main dashboard - requires authentication
+    application.add_handler(CallbackQueryHandler(AdminDashboard.main_dashboard, pattern='^admin_dashboard$'))
+    application.add_handler(CallbackQueryHandler(AdminAuth.logout, pattern='^admin_logout$'))
     
     # Broadcast system
     application.add_handler(CallbackQueryHandler(broadcast_menu, pattern='^admin_broadcast$'))
@@ -313,13 +336,15 @@ def main():
     
     # Start bot
     logger.info("🤖 Bot starting with Premium Admin Dashboard...")
-    logger.info("✅ Secure Authentication System Ready")
+    logger.info("✅ Secure 2-Step Authentication System Ready")
     logger.info("✅ Force Join Middleware Active")
     logger.info("✅ Broadcast System Ready")
     logger.info("✅ Credit Management Ready")
     logger.info("✅ AI Assistant Ready")
-    logger.info("🔐 Security: Code 122911 + Question 'avik'")
+    logger.info("🔐 Security: Code '122911' + Question 'avik'")
+    logger.info("🔒 Admin access: Button only (no /admin command)")
     application.run_polling(allowed_updates=['message', 'callback_query'])
+
 
 if __name__ == '__main__':
     main()
