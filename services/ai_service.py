@@ -1,10 +1,10 @@
-# 🤖 OpenRouter AI Service - Gemini 2.0 Flash Integration
+# 🤖 OpenRouter AI Service - Gemini 2.0 Flash Integration with Vision
 
 import aiohttp
 import asyncio
 import logging
 import json
-from typing import Optional, Dict
+from typing import Optional, Dict, List, AsyncIterator
 from config import AIConfig
 from datetime import datetime
 
@@ -12,13 +12,119 @@ logger = logging.getLogger(__name__)
 
 
 class AIService:
-    """OpenRouter AI Service for Gemini 2.0 Flash"""
+    """OpenRouter AI Service for Gemini 2.0 Flash with Vision Support"""
     
     def __init__(self):
         self.api_key = AIConfig.OPENROUTER_API_KEY
         self.api_base = AIConfig.OPENROUTER_API_BASE
-        self.model = AIConfig.AI_MODEL
+        self.model = AIConfig.AI_MODEL  # google/gemini-2.0-flash-exp:free
         self.enabled = AIConfig.AI_ENABLED
+    
+    async def analyze_image(self, image_url: str, question: str = "What is in this image?") -> Optional[str]:
+        """
+        Analyze image using Gemini 2.0 Flash Vision
+        
+        Args:
+            image_url: URL of the image to analyze
+            question: Question to ask about the image
+        
+        Returns:
+            AI analysis of the image or None if failed
+        """
+        if not self.enabled:
+            logger.warning("AI features disabled")
+            return None
+        
+        logger.info(f"🖼️ Analyzing image: {image_url[:50]}...")
+        
+        return await self._call_vision_api(
+            text=question,
+            image_url=image_url
+        )
+    
+    async def analyze_course_thumbnail(self, image_url: str, course_name: str) -> Optional[str]:
+        """
+        Analyze course thumbnail and provide feedback
+        
+        Args:
+            image_url: URL of the course thumbnail
+            course_name: Name of the course
+        
+        Returns:
+            Analysis and suggestions for improvement
+        """
+        if not self.enabled:
+            return None
+        
+        prompt = f"""
+Analyze this course thumbnail for "{course_name}".
+
+Provide:
+1. What elements are visible
+2. Design quality rating (1-10)
+3. Does it look professional?
+4. Suggestions for improvement
+5. Does it match the course topic?
+
+Keep response under 200 words.
+        """
+        
+        return await self._call_vision_api(
+            text=prompt,
+            image_url=image_url
+        )
+    
+    async def analyze_payment_proof(self, image_url: str) -> Optional[Dict[str, any]]:
+        """
+        Analyze payment proof screenshot
+        
+        Args:
+            image_url: URL of the payment screenshot
+        
+        Returns:
+            Dictionary with verification details or None
+        """
+        if not self.enabled:
+            return None
+        
+        prompt = """
+Analyze this payment screenshot.
+
+Extract and verify:
+1. Payment method (UPI/FamPay/etc)
+2. Transaction ID (if visible)
+3. Amount paid (in ₹)
+4. Payment status (Success/Pending/Failed)
+5. Timestamp (if visible)
+6. Is this a valid payment proof?
+
+Respond in JSON format:
+{
+  "valid": true/false,
+  "method": "UPI/FamPay/etc",
+  "amount": "₹XXX",
+  "transaction_id": "xxx or null",
+  "status": "Success/Pending/Failed",
+  "timestamp": "date or null",
+  "confidence": "High/Medium/Low",
+  "notes": "any additional observations"
+}
+        """
+        
+        result = await self._call_vision_api(
+            text=prompt,
+            image_url=image_url
+        )
+        
+        if result:
+            try:
+                # Try to parse JSON response
+                return json.loads(result)
+            except json.JSONDecodeError:
+                logger.warning("AI response not in JSON format, returning raw text")
+                return {"raw_response": result, "valid": False}
+        
+        return None
     
     async def generate_course_description(self, course_name: str, topics: str, level: str = "Beginner") -> Optional[str]:
         """
@@ -245,6 +351,113 @@ Generate course ideas only.
         
         return await self._call_api(prompt)
     
+    async def _call_vision_api(self, text: str, image_url: str, stream: bool = False) -> Optional[str]:
+        """
+        Make vision API call to OpenRouter (text + image)
+        
+        Args:
+            text: Text prompt/question
+            image_url: URL of the image
+            stream: Whether to stream the response
+        
+        Returns:
+            AI response or None if failed
+        """
+        
+        if not self.api_key:
+            logger.error("OpenRouter API key not configured")
+            return None
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "HTTP-Referer": "https://github.com/alexavik/Botavik",
+            "X-Title": "Botavik Course Bot",
+            "Content-Type": "application/json"
+        }
+        
+        # Multimodal payload (text + image)
+        payload = {
+            "model": self.model,  # google/gemini-2.0-flash-exp:free supports vision
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": text
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_url
+                            }
+                        }
+                    ]
+                }
+            ],
+            "stream": stream
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.api_base}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=60)  # Vision takes longer
+                ) as response:
+                    
+                    if response.status == 200:
+                        if stream:
+                            # Handle streaming response
+                            full_content = ""
+                            async for line in response.content:
+                                if line:
+                                    try:
+                                        line_text = line.decode('utf-8').strip()
+                                        if line_text.startswith('data: '):
+                                            json_str = line_text[6:]
+                                            if json_str != '[DONE]':
+                                                chunk = json.loads(json_str)
+                                                content = chunk.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                                if content:
+                                                    full_content += content
+                                    except Exception as e:
+                                        continue
+                            logger.info(f"✅ Vision AI analysis successful (streaming)")
+                            return full_content.strip()
+                        else:
+                            # Handle non-streaming response
+                            data = await response.json()
+                            content = data['choices'][0]['message']['content'].strip()
+                            logger.info(f"✅ Vision AI analysis successful")
+                            return content
+                    
+                    elif response.status == 429:
+                        logger.warning("⏱️ Rate limited on vision API")
+                        return None
+                    
+                    elif response.status == 401:
+                        logger.error("❌ Invalid API key for OpenRouter")
+                        return None
+                    
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"❌ Vision API error {response.status}: {error_text}")
+                        return None
+        
+        except asyncio.TimeoutError:
+            logger.error("⏱️ Vision API request timeout")
+            return None
+        
+        except aiohttp.ClientError as e:
+            logger.error(f"❌ Network error in vision API: {e}")
+            return None
+        
+        except Exception as e:
+            logger.error(f"❌ Unexpected error in vision API: {e}")
+            return None
+    
     async def _call_api(self, prompt: str, max_retries: int = 3) -> Optional[str]:
         """
         Make API call to OpenRouter with retry logic
@@ -357,6 +570,28 @@ Generate course ideas only.
             return True
         else:
             logger.error("❌ OpenRouter AI connection failed")
+            return False
+    
+    async def test_vision(self, test_image_url: str = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg") -> bool:
+        """
+        Test vision API with a sample image
+        
+        Args:
+            test_image_url: URL of test image
+        
+        Returns:
+            True if vision works, False otherwise
+        """
+        if not self.enabled or not self.api_key:
+            return False
+        
+        result = await self.analyze_image(test_image_url, "Describe this image in one sentence.")
+        
+        if result:
+            logger.info(f"✅ Vision API test successful: {result[:100]}...")
+            return True
+        else:
+            logger.error("❌ Vision API test failed")
             return False
 
 
